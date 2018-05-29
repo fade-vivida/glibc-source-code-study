@@ -1,0 +1,4 @@
+# Ptmalloc 源码学习 #
+## malloc.c ##
+### unlink宏 ###
+unlink()为双向链表的拆链函数，在ptmalloc中以宏的形式进行了定义，其具体定义如下所示：
