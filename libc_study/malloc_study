@@ -1,13 +1,18 @@
 # Ptmalloc 源码学习 #
 ## malloc.c ##
 ### unlink宏 ###
-unlink()为双向链表的拆链函数，在ptmalloc中以宏的形式进行了定义，其具体定义如下所示：
+unlink()为双向链表的拆链函数，在ptmalloc中以宏的形式进行了定义，其具体定义如下所示：  
 ![unlink](https://raw.githubusercontent.com/fade-vivida/libc-linux-source-code-study/master/libc_study/picture/unlink.PNG)  
 首先对要进行拆链的堆块P进行一系列的安全检查。
 #### check 1 ####
+检查表达式：
+
     if (__builtin_expect (chunksize(P) != prev_size (next_chunk(P)), 0))  \
       malloc_printerr ("corrupted size vs. prev_size");			  \
-check当前拆链的chunk_p的size字段，是否和下一个chunk的presize字段相等。其中\_\_builtin\_expect是GNU C特有的编译器的优化用法，作用为假设其第一个参数（或者是表达式的值）很大可能上与第二个参数相等，目的是为了加快流水线的执行速度。
+check当前拆链的chunk_p的size字段，是否和下一个chunk的presize字段相等。其中\_\_builtin\_expect是GNU C特有的编译器的优化用法，作用为假设其第一个参数（或者是表达式的值）很大可能上与第二个参数相等，目的是为了加快流水线的执行速度。  
+
+对应错误信息：  
+![error1](https://raw.githubusercontent.com/fade-vivida/libc-linux-source-code-study/master/libc_study/picture/error1.PNG)
 #### check 2 ####
     if (__builtin_expect (FD->bk != P || BK->fd != P, 0))		  \
       malloc_printerr ("corrupted double-linked list");			  \
@@ -15,6 +20,8 @@ check当前拆链的chunk_p的size字段，是否和下一个chunk的presize字�
 FD->bk == chunk\_P?  
 BK->fd == chunk\_P?  
 其中FD = chunk\_P->fd，BK = chunk\_P->bk  
+对应错误信息：  
+![error2](https://raw.githubusercontent.com/fade-vivida/libc-linux-source-code-study/master/libc_study/picture/error2.PNG)
 #### check 3 ####
 检查当前chunk的size是否在smallbin的范围内，在64-bit下samllbin的大小最大为512byte。如果chunk\_size>512，则该chunk属于largebin，判断其fd\_nextsize字段是否为NULL（其中fd\_nextsize和bk\_nextsize字段是largebin特有的）。
 
@@ -23,7 +30,10 @@ BK->fd == chunk\_P?
     	if (__builtin_expect (P->fd_nextsize->bk_nextsize != P, 0)	  \
     		|| __builtin_expect (P->bk_nextsize->fd_nextsize != P, 0))\
     	  malloc_printerr ("corrupted double-linked list (not small)");   \
-若fd\_nextsize字段不为NULL，则判断largebin的双向链表是否完整（判断方法与smallbin相同，即chunk\_P->fd\_nextsize->bk\_nextsize==chunk\_P? &&  
+若fd\_nextsize字段不为NULL，则判断largebin的双向链表是否完整（判断方法与smallbin相同，即chunk\_P->fd\_nextsize->bk\_nextsize == chunk\_P? &&  
 chunk\_P->bk\_nextsize->fd\_nextsize == chunk\_P?)  
+对应错误信息：  
+![error3](
+
 
 
