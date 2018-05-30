@@ -41,8 +41,25 @@ chunk\_P->bk\_nextsize->fd\_nextsize == chunk\_P?)
 FD->bk = BK  
 BK->fd = FD  
 ##### 4.2 chunk大小为largebin #####
+    if (FD->fd_nextsize == NULL) {				  \
+    	if (P->fd_nextsize == P)				  \
+      		FD->fd_nextsize = FD->bk_nextsize = FD;		  \
+    	else {							  \
+    		FD->fd_nextsize = P->fd_nextsize;			  \
+    		FD->bk_nextsize = P->bk_nextsize;			  \
+    		P->fd_nextsize->bk_nextsize = FD;			  \
+    		P->bk_nextsize->fd_nextsize = FD;			  \
+      	}							  \
+    } 
+	else {							  \
+    	P->fd_nextsize->bk_nextsize = P->bk_nextsize;		  \
+    	P->bk_nextsize->fd_nextsize = P->fd_nextsize;		  \
+	}								  \
 
-  
+动态调试结果：  
+![largebin](https://raw.githubusercontent.com/fade-vivida/libc-linux-source-code-study/master/libc_study/picture/largebin.PNG)  
+疑惑点：关于fd\_nextsize和bk\_nextsize字段的作用。  
+首先判断fd，bk构成的双向链表中的前一个chunk是否为largebin，然后判断当前chunk的fd\_nextsize字段是否指向自身。若是，表明当前chunk是第一个largebin chunk
 
 
-
+# \_int\_malloc(mstate av,size_t bytes) #
