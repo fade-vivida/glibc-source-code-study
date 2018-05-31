@@ -1,4 +1,5 @@
 # Ptmalloc 源码学习 #
+**注：在不经过特殊说明的情况下，以下研究结果均针对64-bit操作系统。**
 ## malloc.c ##
 ### unlink宏 ###
 unlink()为双向链表的拆链函数，在ptmalloc中以宏的形式进行了定义，其具体定义如下所示：  
@@ -63,3 +64,127 @@ BK->fd = FD
 
 
 # \_int\_malloc(mstate av,size_t bytes) #
+函数执行流程如下所示：
+
+
+## 1. 调用checked\_request2size(bytes,nb)得到真正的chunk大小 ##
+其中req为用户请求申请的chunk大小（也即用户可输入的数据大小），sz为进行规范化后chunk的实际大小（即malloc\_chunk中的size字段），其中REQUEST\_OUT\_OF\_RANGE宏定义为
+
+    #define REQUEST_OUT_OF_RANGE(req) ((unsigned long) (req) >= (unsigned long) (INTERNAL_SIZE_T) (-2 * MINSIZE))
+	//计算得到可申请的最大堆块大小为0xFFFFFFC0（即3.9G）     
+![request2size](https://raw.githubusercontent.com/fade-vivida/libc-linux-source-code-study/master/libc_study/picture/checked_request2size.PNG)  
+可以看到，在check_request2size()中，又继续调用request2size()来得到实际chunk的size。  
+request2size()的实现代码如下所示：  
+
+    #define request2size(req) \
+      (((req) + SIZE_SZ + MALLOC_ALIGN_MASK < MINSIZE)  ? \
+       MINSIZE :  \
+       ((req) + SIZE_SZ + MALLOC_ALIGN_MASK) & ~MALLOC_ALIGN_MASK)
+其中MINSIZE定义如下：
+
+    #define MINSIZE  \
+      (unsigned long)(((MIN_CHUNK_SIZE+MALLOC_ALIGN_MASK) & ~MALLOC_ALIGN_MASK))
+	  //其中 MALLOC_ALIGN_MASK = MALLOC_ALIGNMENT - 1，MALLOC_ALIGNMENT定义如下，反推可以得到MALLOC_ALIGN_MASK=0xF
+	
+	#define MALLOC_ALIGNMENT = (2*SIZE_T < __alignof__(long double) ? __alignof__(long double):(2*SIZE_T)
+	//__alignof__为一个宏定义，即得到对应数据类型的对齐值，在64-bit下__alignof__(long double)=16，也即MALLOC_ALIGNMENT=0x10
+  
+MIN\_CHUNK\_SIZE定义为：
+
+    #define MIN_CHUNK_SIZE(offsetof(struct malloc_chunk, fd_nextsize))
+	//其中offsetof为一个宏定义，功能为计算得到fd_nextsize在malloc\_chunk结构体中的偏移（即宏定义返回值为0x20，64-bit）。
+	//因此我们从这可以看出对于ptmalloc机制而言，最小分配的chunk大小为0x20（32-bit下最小chunk大小为0x10）。 
+反推回去得知，MINSIZE = (0x20 + 0xF) & 0xFFFFFFF0 = 0x20 （64-bits），32位下MINSZIE按照同样的计算方法为0x10。  
+至此，我们得到了request2size(req)函数的计算方法，代码如下所示：
+
+    if(req + 8 + 0xf < 0x20)
+		return 0x20;
+	else
+		return (req + 0x8 + 0xf) & 0xfffffff0		//增加8byte字节后，对于16byte进行取整
+**注：从这我们可以得到在ptmalloc机制中堆块重叠使用的根本原理所在，即如果当前堆块不为空，下一个堆块的presize字段可被当前堆块作为数据区使用。**
+## 2. ##
+首先查看当前arena是否可用（多线程下除main\_arnea外，还存在其他arnea，具体数目为处理器内核数*2-1)，其中\_\_glibc\_unlikely宏实际调用的还是\_\_builtin\_expect()宏，功能为进行编译器优化，将最可能的执行结构放在跳转指令后，加大分支预测的成功率。这里\_\_glibc\_unlikely就为之后表达式不成功的概率较大。
+
+    /* There are no usable arenas.  Fall back to sysmalloc to get a chunk from
+     mmap.  */
+      if (__glibc_unlikely (av == NULL))
+    {
+      void *p = sysmalloc (nb, av);
+      if (p != NULL)
+    	alloc_perturb (p, bytes);
+      return p;
+    }
+然后判断当前申请chunk size(nb)是否满足fastbin大小，其中get_max_fast()函数在32-bit下返回值为0x50，在64-bit为下返回值为0xa0。
+
+    if ((unsigned long) (nb) <= (unsigned long) (get_max_fast ())) //get max_size of fastbin:80(0x50,32-bit),160byte(0xa0,64-bit)
+	{
+		idx = fastbin_index (nb);
+		mfastbinptr *fb = &fastbin (av, idx);
+      	mchunkptr pp;
+      	victim = *fb;
+然后使用fastbin\_index计算当前chunk size所属的fastbin数组的索引，计算方法如下：
+    
+	#define fastbin_index(sz) ((((unsigned int) (sz)) >> (SIZE_SZ == 8 ? 4 : 3)) - 2)
+由于计算结果采用了不精确的计算方法，这其实就是为什么可以利用fastbin attack攻击的原理所在。  
+然后调用fastbin(av,idx)宏，得到当前chunk size所属fastbin数组元素的地址（fb），victim就为fastbin[idx]链表中第一个chunk节点。其中fastbin宏定义如下：
+
+    #define fastbin(ar_ptr, idx) ((ar_ptr)->fastbinsY[idx])
+如果victime==NULL，表明当前fastbin链表为空，则无法使用fastbin进行分配，需要采用后续解决方法。如果victim!=NULL，首先判断当前程序是否为单线程。若是，取出fastbin链表中的第一个元素，也即最后加入的元素（因此，fastbi链表采用先进后出FILO原则)
+
+	if (victim != NULL)
+	{
+		if (SINGLE_THREAD_P)
+			*fb = victim->fd;
+			//FILO
+	  	else
+			REMOVE_FB (fb, pp, victim);
+				
+如过当前程序为多线程，则使用REMOVE_FB宏进行fastbin链表的拆链操作。具体操作如下所示： 
+
+    #define REMOVE_FB(fb, victim, pp)			
+	do							
+    {
+		victim = pp;					
+		if (victim == NULL)				
+    		break;						
+    }							
+    while ((pp = catomic_compare_and_exchange_val_acq (fb, victim->fd, victim))!= victim);					\
+
+
+
+
+    	  	if (__glibc_likely (victim != NULL))
+    		{
+    	  		size_t victim_idx = fastbin_index (chunksize (victim));
+    	  		if (__builtin_expect (victim_idx != idx, 0))
+    				malloc_printerr ("malloc(): memory corruption (fast)");
+    	  		check_remalloced_chunk (av, victim, nb);
+    			#if USE_TCACHE
+    	  		/* While we're here, if we see other chunks of the same size,
+    		 	stash them in the tcache.  */
+    	  		size_t tc_idx = csize2tidx (nb);
+    	  		if (tcache && tc_idx < mp_.tcache_bins)
+    			{
+    		  		mchunkptr tc_victim;
+    				/* While bin not empty and tcache not full, copy chunks.  */
+    		  		while (tcache->counts[tc_idx] < mp_.tcache_count
+    			 		&& (tc_victim = *fb) != NULL)
+    				{
+    		  			if (SINGLE_THREAD_P)
+    						*fb = tc_victim->fd;
+    		  			else
+    					{
+    			  			REMOVE_FB (fb, pp, tc_victim);
+    			  			if (__glibc_unlikely (tc_victim == NULL))
+    							break;
+    					}
+    		  			tcache_put (tc_victim, tc_idx);
+    				}
+    			}
+    			#endif
+    	  		void *p = chunk2mem (victim);
+    	  		alloc_perturb (p, bytes);
+    	  		return p;
+    		}
+		}
+	}
