@@ -64,9 +64,10 @@ BK->fd = FD
 
 
 # \_int\_malloc(mstate av,size_t bytes) #
-函数执行流程如下所示：
+函数执行流程如下所示：  
+Fastbin
 
-
+# Fastbin分配机制 #
 ## 1. 调用checked\_request2size(bytes,nb)得到真正的chunk大小 ##
 其中req为用户请求申请的chunk大小（也即用户可输入的数据大小），sz为进行规范化后chunk的实际大小（即malloc\_chunk中的size字段），其中REQUEST\_OUT\_OF\_RANGE宏定义为
 
@@ -103,7 +104,7 @@ MIN\_CHUNK\_SIZE定义为：
 		return (req + 0x8 + 0xf) & 0xfffffff0		//增加8byte字节后，对于16byte进行取整
 **注：从这我们可以得到在ptmalloc机制中堆块重叠使用的根本原理所在，即如果当前堆块不为空，下一个堆块的presize字段可被当前堆块作为数据区使用。**
 ## 2.计算得到fastbin数组索引，进行拆链操作 ##
-首先查看当前arena是否可用（多线程下除main\_arnea外，还存在其他arnea，具体数目为处理器内核数*2-1)，其中\_\_glibc\_unlikely宏实际调用的还是\_\_builtin\_expect()宏，功能为进行编译器优化，将最可能的执行结构放在跳转指令后，加大分支预测的成功率。这里\_\_glibc\_unlikely就为之后表达式不成功的概率较大。
+首先查看当前arena是否可用（多线程下除main\_arnea外，还存在其他arnea，具体数目为处理器内核数*2+1)，其中\_\_glibc\_unlikely宏实际调用的还是\_\_builtin\_expect()宏，功能为进行编译器优化，将最可能的执行结构放在跳转指令后，加大分支预测的成功率。这里\_\_glibc\_unlikely就为之后表达式不成功的概率较大。
 
     /* There are no usable arenas.  Fall back to sysmalloc to get a chunk from
      mmap.  */
@@ -170,7 +171,7 @@ MIN\_CHUNK\_SIZE定义为：
 **注：这里引入了很重要的一点，即为什么我们在采用fastbin attack时，需要将fd指向一个符合当前fastbinY[idx]数组大小的位置（可以错位，且比较时是将size转化为一个unsigned int（32-bit））**
 
 
-### 3.对从fastbin数组链表中获取到的victim，进行更为严格的检查 ###
+## 3.对从fastbin数组链表中获取到的victim，进行更为严格的检查 ##
 在对victim的size字段进行检查后，又调用了check\_remalloced\_chunk()对victim进行了更为细致的检查。check\_remalloced_chunk()函数的定义如下所示：
 
     do_check_remalloced_chunk (mstate av, mchunkptr p, INTERNAL_SIZE_T s)
@@ -228,9 +229,45 @@ MIN\_CHUNK\_SIZE定义为：
 		}
 	}
 	#endif
-
+TCACHE机制后，如果设置了perturb\_byte，则调用alloc\_pertrub对chunk的数据区进行填充。
 
 	void *p = chunk2mem (victim);
 	alloc_perturb (p, bytes);
 	return p;
 	}}}
+alloc\_perturb()函数定义如下：
+
+    static void alloc_perturb (char *p, size_t n)
+    {
+		if (__glibc_unlikely (perturb_byte))
+    	memset (p, perturb_byte ^ 0xff, n);
+    }
+至此，在\_int\_malloc()函数中fastbin部分的分析结束。
+
+# SmallBin分配机制 #
+
+	#define NSMALLBINS 64
+    #define SMALLBIN_WIDTHMALLOC_ALIGNMENT
+    #define SMALLBIN_CORRECTION (MALLOC_ALIGNMENT > 2 * SIZE_SZ)
+    #define MIN_LARGE_SIZE((NSMALLBINS - SMALLBIN_CORRECTION) * SMALLBIN_WIDTH)
+    #define in_smallbin_range(sz) ((unsigned long) (sz) < (unsigned long) MIN_LARGE_SIZE)
+
+
+	if (in_smallbin_range (nb))
+    {	
+		idx = smallbin_index (nb);
+      	bin = bin_at (av, idx);
+    	if ((victim = last (bin)) != bin)
+    	{
+      		bck = victim->bk;
+    	  	if (__glibc_unlikely (bck->fd != victim))
+    			malloc_printerr ("malloc(): smallbin double linked list corrupted");
+      		set_inuse_bit_at_offset (victim, nb);
+      		bin->bk = bck;
+      		bck->fd = bin;
+    		if (av != &main_arena)
+    			set_non_main_arena (victim);
+      		check_malloced_chunk (av, victim, nb);
+首先调用in\_smallbin\_range宏检查申请size是否在smallbin范围内（64-bit:1024byte      32-bit:512byte）。
+
+    
