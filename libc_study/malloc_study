@@ -102,7 +102,7 @@ MIN\_CHUNK\_SIZE定义为：
 	else
 		return (req + 0x8 + 0xf) & 0xfffffff0		//增加8byte字节后，对于16byte进行取整
 **注：从这我们可以得到在ptmalloc机制中堆块重叠使用的根本原理所在，即如果当前堆块不为空，下一个堆块的presize字段可被当前堆块作为数据区使用。**
-## 2. ##
+## 2.计算得到fastbin数组索引，进行拆链操作 ##
 首先查看当前arena是否可用（多线程下除main\_arnea外，还存在其他arnea，具体数目为处理器内核数*2-1)，其中\_\_glibc\_unlikely宏实际调用的还是\_\_builtin\_expect()宏，功能为进行编译器优化，将最可能的执行结构放在跳转指令后，加大分支预测的成功率。这里\_\_glibc\_unlikely就为之后表达式不成功的概率较大。
 
     /* There are no usable arenas.  Fall back to sysmalloc to get a chunk from
@@ -148,43 +148,89 @@ MIN\_CHUNK\_SIZE定义为：
 		if (victim == NULL)				
     		break;						
     }							
-    while ((pp = catomic_compare_and_exchange_val_acq (fb, victim->fd, victim))!= victim);					\
+    while ((pp = catomic_compare_and_exchange_val_acq (fb, victim->fd, victim))!= victim);					
+其中catomic\_compare\_and\_exchange\_val\_acq(mem,new\_val,old\_val)为一个原子比较交换操作，具体含义如下：
+    
+	if(*mem == old_val){
+		*mem = new_val;
+	}
+	//返回值为new_val
+**疑惑点：多线程下的REMOVE\_FB操作是要讲所有的fastbin都从链表中拆除？**
 
 
+	if (__glibc_likely (victim != NULL))
+    {
+		size_t victim_idx = fastbin_index (chunksize (victim));
+		//#define chunksize(p) (chunksize_nomask (p) & ~(SIZE_BITS))
+		if (__builtin_expect (victim_idx != idx, 0))
+    		malloc_printerr ("malloc(): memory corruption (fast)");
+		check_remalloced_chunk (av, victim, nb);
+然后调用chunksize()得到当前从fastbin链表中取下的victim chunk的大小，并计算得到其所属的fastbin数组的索引值（victim_idx)，并与当前该chunk所在的fastbin数组的索引下标作比较，看是否相等。  
+
+**注：这里引入了很重要的一点，即为什么我们在采用fastbin attack时，需要将fd指向一个符合当前fastbinY[idx]数组大小的位置（可以错位，且比较时是将size转化为一个unsigned int（32-bit））**
 
 
-    	  	if (__glibc_likely (victim != NULL))
-    		{
-    	  		size_t victim_idx = fastbin_index (chunksize (victim));
-    	  		if (__builtin_expect (victim_idx != idx, 0))
-    				malloc_printerr ("malloc(): memory corruption (fast)");
-    	  		check_remalloced_chunk (av, victim, nb);
-    			#if USE_TCACHE
-    	  		/* While we're here, if we see other chunks of the same size,
-    		 	stash them in the tcache.  */
-    	  		size_t tc_idx = csize2tidx (nb);
-    	  		if (tcache && tc_idx < mp_.tcache_bins)
-    			{
-    		  		mchunkptr tc_victim;
-    				/* While bin not empty and tcache not full, copy chunks.  */
-    		  		while (tcache->counts[tc_idx] < mp_.tcache_count
-    			 		&& (tc_victim = *fb) != NULL)
-    				{
-    		  			if (SINGLE_THREAD_P)
-    						*fb = tc_victim->fd;
-    		  			else
-    					{
-    			  			REMOVE_FB (fb, pp, tc_victim);
-    			  			if (__glibc_unlikely (tc_victim == NULL))
-    							break;
-    					}
-    		  			tcache_put (tc_victim, tc_idx);
-    				}
-    			}
-    			#endif
-    	  		void *p = chunk2mem (victim);
-    	  		alloc_perturb (p, bytes);
-    	  		return p;
-    		}
+### 3.对从fastbin数组链表中获取到的victim，进行更为严格的检查 ###
+在对victim的size字段进行检查后，又调用了check\_remalloced\_chunk()对victim进行了更为细致的检查。check\_remalloced_chunk()函数的定义如下所示：
+
+    do_check_remalloced_chunk (mstate av, mchunkptr p, INTERNAL_SIZE_T s)
+    {
+		INTERNAL_SIZE_T sz = chunksize_nomask (p) & ~(PREV_INUSE | NON_MAIN_ARENA);
+		//去除PREV_INUSE和NON_MAIN_ARENA字段
+		if (!chunk_is_mmapped (p))
+    	{
+			//如果该chunk不是mmap分配，而是调用brk分配的。
+			assert (av == arena_for_chunk (p));
+			//调用arena_for_chunk宏，根据当前chunk的地址及size字段得到其所属的arnea
+			//arena_for_chunk(p)，如果p->size & NON_MAIN_ARENA == 0,则返回&main_arean
+			//否则返回(p&(~(0x400*0x400-1)))->ar_ptr字段
+      		if (chunk_main_arena (p))
+    			assert (av == &main_arena);
+      		else
+    			assert (av != &main_arena);
+    	}
+    	do_check_inuse_chunk (av, p);
+    	/* Legal size ... */
+      	assert ((sz & MALLOC_ALIGN_MASK) == 0);
+      	assert ((unsigned long) (sz) >= MINSIZE);
+      	/* ... and alignment */
+      	assert (aligned_OK (chunk2mem (p)));
+      	/* chunk is less than MINSIZE more than request */
+      	assert ((long) (sz) - (long) (s) >= 0);
+      	assert ((long) (sz) - (long) (s + MINSIZE) < 0);
+    } 
+函数功能大体分析如下：  
+1. 检查该chunk所在的arena是否与之前传入函数的av相等。**（注意点：使用fastbin attack攻击时，在构造伪chunk时，其size字段的IS_MAPPED(0x2)必须为1，这样才能绕过对于arean的检查）**  
+2. 调用do\_check\_inuse\_chunk(av,p)，在do\_check\_inuse\_chunk()函数中，还会调用do\_check\_chunk()函数首先对victim块进行相关检查，然后检查下一个chunk的PRE\_INUSE是否置1（fastbin不合并，因此与其相邻的下一个chunk的PRE\_INUSE字段永远为1）；并检查当前chunk的相邻chunk是否处于free状态，如果是，调用do\_check\_free\_chunk对其进行检查。  
+3. 对申请chunk的大小进行检查，对victim的地址进行对齐检查。
+
+对取下的victim chunk进行检查后，是一些关于TCACHE机制的使用方法，具体会在之后的文章中进行分析。
+
+	#if USE_TCACHE
+	/* While we're here, if we see other chunks of the same size, stash them in the tcache.  */
+	size_t tc_idx = csize2tidx (nb);
+	if (tcache && tc_idx < mp_.tcache_bins)
+	{
+		mchunkptr tc_victim;
+		/* While bin not empty and tcache not full, copy chunks.  */
+  		while (tcache->counts[tc_idx] < mp_.tcache_count
+	 		&& (tc_victim = *fb) != NULL)
+		{
+  			if (SINGLE_THREAD_P)
+				*fb = tc_victim->fd;
+  			else
+			{
+	  			REMOVE_FB (fb, pp, tc_victim);
+	  			if (__glibc_unlikely (tc_victim == NULL))
+					break;
+			}
+  			tcache_put (tc_victim, tc_idx);
 		}
 	}
+	#endif
+
+
+	void *p = chunk2mem (victim);
+	alloc_perturb (p, bytes);
+	return p;
+	}}}
