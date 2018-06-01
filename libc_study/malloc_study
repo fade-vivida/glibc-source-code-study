@@ -268,6 +268,22 @@ alloc\_perturb()函数定义如下：
     		if (av != &main_arena)
     			set_non_main_arena (victim);
       		check_malloced_chunk (av, victim, nb);
-首先调用in\_smallbin\_range宏检查申请size是否在smallbin范围内（64-bit:1024byte      32-bit:512byte）。
+首先调用in\_smallbin\_range宏检查申请size是否在smallbin范围内（64-bit:1024byte      32-bit:512byte）。然后计算得到所属smallbin的索引号，计算方法如下所示（即在64-bit下，idx=size/16；32-bit下，idx=size/8+SMALLBIN_CORRECTION）：
 
-    
+    #define smallbin_index(sz) ((SMALLBIN_WIDTH == 16 ? (((unsigned) (sz)) >> 4) : (((unsigned) (sz)) >> 3)) + SMALLBIN_CORRECTION)
+然后根据索引号idx，计算得到该bin数组的地址。
+
+    #define bin_at(m, i) \
+      (mbinptr) (((char *) &((m)->bins[((i) - 1) * 2]))			  \
+     - offsetof (struct malloc_chunk, fd))
+    //之所以要减去0x10，是因为smallbin是以双向链表的形式存在，fd指针在malloc_chunk结构中的偏移就是0x10
+	//因此如果把bin数组也当做一个malloc_chunk结构的话，则该chunk的地址就为fd指针地址减去0x10。
+然后调用last(bin)检查当前bin链表中是否存在空闲的chunk。如果存在，取下最先放入该链表的chunk（FIFO，先入先出规则），并对链表的完整新进行检验（victim->bk->fd==victim?）。如果链表被破坏，打印出错误信息。  
+![smallbin double linked list corrupted](https://raw.githubusercontent.com/fade-vivida/libc-linux-source-code-study/master/libc_study/picture/small_double_linklist_corrupt.PNG)  
+然后调用set\_inuse\_bit\_at\_offset()函数，标志当前chunk已被使用。
+
+    #define set_inuse_bit_at_offset(p, s) (((mchunkptr) (((char *) (p)) + (s)))->mchunk_size |= PREV_INUSE)
+然后进行双向链表的拆链操作  
+bin->bk=bck  
+bck->fd=bin  
+如果当前arena不是main\_arena，则设置victim的NON\_MAIN_ARENA位。然后调用check\_malloced\_chunk()对victim进行一系列检查。
