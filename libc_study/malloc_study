@@ -1,11 +1,13 @@
 # Ptmalloc 源码学习 #
 **注：在不经过特殊说明的情况下，以下研究结果均针对64-bit操作系统。**
-## malloc.c ##
-### unlink宏 ###
+# malloc.c #
+# unlink宏 #
+## 1.函数功能 ##
 unlink()为双向链表的拆链函数，在ptmalloc中以宏的形式进行了定义，其具体定义如下所示：  
 ![unlink](https://raw.githubusercontent.com/fade-vivida/libc-linux-source-code-study/master/libc_study/picture/unlink.PNG)  
+## 2.拆链前的检查操作 ##
 首先对要进行拆链的堆块P进行一系列的安全检查。
-#### 1）check 1 ####
+### 1）check 1 ###
 检查表达式：
 
     if (__builtin_expect (chunksize(P) != prev_size (next_chunk(P)), 0))  \
@@ -14,7 +16,7 @@ check当前拆链的chunk_p的size字段，是否和下一个chunk的presize字�
 
 对应错误信息：  
 ![error1](https://raw.githubusercontent.com/fade-vivida/libc-linux-source-code-study/master/libc_study/picture/error1.PNG)
-#### 2）check 2 ####
+### 2）check 2 ###
     if (__builtin_expect (FD->bk != P || BK->fd != P, 0))		  \
       malloc_printerr ("corrupted double-linked list");			  \
 经典的双向链表拆链前的验证操作，查看  
@@ -23,7 +25,7 @@ BK->fd == chunk\_P?
 其中FD = chunk\_P->fd，BK = chunk\_P->bk  
 对应错误信息：  
 ![error2](https://raw.githubusercontent.com/fade-vivida/libc-linux-source-code-study/master/libc_study/picture/error2.PNG)
-#### 3）check 3 ####
+### 3）check 3 ###
 检查当前chunk的size是否在smallbin的范围内，在64-bit下samllbin的大小最大为512byte。如果chunk\_size>512，则该chunk属于largebin，判断其fd\_nextsize字段是否为NULL（其中fd\_nextsize和bk\_nextsize字段是largebin特有的）。
 
     if (!in_smallbin_range (chunksize_nomask (P))			 \
@@ -35,13 +37,13 @@ BK->fd == chunk\_P?
 chunk\_P->bk\_nextsize->fd\_nextsize == chunk\_P?)  
 对应错误信息：  
 ![error3](https://raw.githubusercontent.com/fade-vivida/libc-linux-source-code-study/master/libc_study/picture/error3.PNG)
-#### 4）unlink操作 ####
+## 3.unlink操作 ##
 完成这一系列check后，则进行双向链表的拆链操作。  
-##### 4.1 chunk大小为smallbin #####
+### 1.chunk大小为smallbin ###
 经典的拆链操作（其中FD = chunk\_P->fd，BK = chunk\_P->bk）：  
 FD->bk = BK  
 BK->fd = FD  
-##### 4.2 chunk大小为largebin #####
+### 2.chunk大小为largebin ###
     if (FD->fd_nextsize == NULL) {				  \
     	if (P->fd_nextsize == P)				  \
       		FD->fd_nextsize = FD->bk_nextsize = FD;		  \
@@ -394,7 +396,7 @@ bck->fd=bin
     fastbins.  So, instead, we need to use a minor variant of the same
     code.
 Free()函数的特殊变种，可以实现对于fastbin链表中的chunk的回收处理。Free()函数本身无法完成这项工作。因为free()一个原本属于fastbin大小的chunk时，只会将该chunk加入到fastbin链表中。
-## 2. ##
+## 2.合并fastbin chunk，将其加入unsortedbin ##
 
     static void malloc_consolidate(mstate av)
     {
@@ -427,8 +429,9 @@ Free()函数的特殊变种，可以实现对于fastbin链表中的chunk的回�
       	*/
      	maxfb = &fastbin (av, NFASTBINS - 1);
 		//NFASTBINS = 10
-		//maxfb保存了最后一个fastbin数组元素的地址（即fastbinsY[9]的地址）
+		//maxfb保存了最后一个fastbin数组元素的地址（即&fastbinsY[9]）
       	fb = &fastbin (av, 0);
+		//fb保存了fastbin数组第一个元素的地址（即&fastbinsY[0]）
       	do {
     		p = atomic_exchange_acq (fb, NULL);
     		if (p != 0) {
@@ -436,30 +439,40 @@ Free()函数的特殊变种，可以实现对于fastbin链表中的chunk的回�
 					unsigned int idx = fastbin_index (chunksize (p));
 	    	  		if ((&fastbin (av, idx)) != fb)
 	    				malloc_printerr ("malloc_consolidate(): invalid chunk size");
-    
+对从fastbin链表中取下的chunk进行size字段检验，看其是否属于当前fastbin链表。  
+错误信息：  
+![malloc_consolidata()error](https://raw.githubusercontent.com/fade-vivida/libc-linux-source-code-study/master/libc_study/picture/malloc_consolidata.PNG)    				
+
     				check_inuse_chunk(av, p);
     				nextp = p->fd;
-    
     				/* Slightly streamlined version of consolidation code in free() */
-    				size = chunksize (p);
+    				之后的操作为对fastbin chunk的合并操作，与free()函数不同的是，在free()中fastbin chunk不合并。
+					size = chunksize (p);
     				nextchunk = chunk_at_offset(p, size);
     				nextsize = chunksize(nextchunk);
-    
+    				
 			    	if (!prev_inuse(p)) {
 			    	  	prevsize = prev_size (p);
 			    	  	size += prevsize;
+						//合并后的大小
 			    	  	p = chunk_at_offset(p, -((long) prevsize));
+						//得到前一个chunk的地址
 			    	  	unlink(av, p, bck, fwd);
 			    	}
-    
+如果当前的chunk的前一个chunk为free状态（pre_inuse(p)==0)，则对前一个chunk进行unlink操作。
+
     				if (nextchunk != av->top) {
     	  				nextinuse = inuse_bit_at_offset(nextchunk, nextsize);
-		    			if (!nextinuse) {
+						//标志下一个chunk是否处于free状态		    			
+						if (!nextinuse) {
     						size += nextsize;
     						unlink(av, nextchunk, bck, fwd);
-    	  				} 
+    	  				}
+如果下一个chunk（即nextchunk）也是free状态，将该chunk也从其所属的双向链表中拆下，进行合并。
+ 
 						else
     						clear_inuse_bit_at_offset(nextchunk, 0);
+							//由于free函数中，fastbin不合并的原因，因此标志fastbin chunk是否使用的pre_inuse一直为1，在这需对其进行清0，以表示新合并的chunk p处于free状态。
 	    				first_unsorted = unsorted_bin->fd;
 				    	unsorted_bin->fd = p;
 				    	first_unsorted->bk = p;
@@ -467,19 +480,35 @@ Free()函数的特殊变种，可以实现对于fastbin链表中的chunk的回�
     						p->fd_nextsize = NULL;
     						p->bk_nextsize = NULL;
     	  				}
+如果合并后的chunk size不在smallbin的范围内，则将新chunk的fd\_nextsize和bk\_nextsize字段清0。
+
     					set_head(p, size | PREV_INUSE);
+						//设置chunk p的size字段，并标志chunk p的前一个chunk为使用状态
 			    	  	p->bk = unsorted_bin;
 			    	  	p->fd = first_unsorted;
+以下4条语句的功能就为把新合并的chunk p加入到unsortedbin中。  
+unsorted\_bin->fd = p  
+p->fd = first\_unsorted  
+first\_unsorted->bk = p  
+p->bk = unsorted\_bin
+
 			    	  	set_foot(p, size);
+然后设置下一个chunk的presize字段为当前chunk p的size。
+
     				}
     				else {
 		    	  		size += nextsize;
 		    	  		set_head(p, size | PREV_INUSE);
 		    	  		av->top = p;
     				}
+如果新合并的chunk p的下一个chunk为top\_chunk，则将其整个合并到top\_chunk中。
+
     			} while ( (p = nextp) != 0);
-    
+循环对当前fastbin链表中的chunk进行同样的操作。    
+
     		}
       } while (fb++ != maxfb);
-    }
+	}
+循环对所有的fastbin链表进行同样的操作。
+
 
