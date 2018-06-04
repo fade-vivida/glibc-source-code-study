@@ -385,8 +385,151 @@ bck->fd=bin
 **32bit下，largebin的下限范围为：512 byte**  
 **64bit下，largebin的下限范围为：1024 byte**  
 **64bit下，largebin又分为33个区间大小都为64byte，15个区间大小为512byte,9个区间大小为4096byte等等的小区间**  
-在得到largebin的idx后，则会调用malloc\_consolidata()函数。  
-未完待续。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。（3704）
+</br>
+</br>
+**注：CTF中的一个重要考点！！！**  
+**如果分配的size最后需要调用largebin来满足，且当前fastbin链表中存在fastbin chunk（即arena的have\_fastchunks字段为1，则会调用malloc\_consolidata()函数对fastbin chunk进行合并，并加入到unsorted_bin中。**
+
+## 5.UnsortedBin分配机制 ##
+### 1. malloc源码关于unsortedbin分配的说明 ###
+	 Process recently freed or remaindered chunks, taking one only if
+     it is exact fit, or, if this a small request, the chunk is remainder from
+     the most recent non-exact fit.  Place other traversed chunks in
+     bins.  Note that this step is the only place in any routine where
+     chunks are placed in bins.
+
+     The outer loop here is needed because we might not realize until
+     near the end of malloc that we should have consolidated, so must
+     do so and retry. This happens at most once, and only when we would
+     otherwise need to expand memory to service a "small" request.
+大概意思为：unsortedbin分配处理事例是唯一能够将chunk从unsortedbin中放入其他bin的方法，并且使用unsortedbin分配时不是精确匹配，而是大于当前需要size的最小值。同时外层的循环的必要性是为了
+### 2. 使用last\_remainder进行分配 ###
+
+    while ((victim = unsorted_chunks (av)->bk) != unsorted_chunks (av))
+    {
+		bck = victim->bk;
+      	if (__builtin_expect (chunksize_nomask (victim) <= 2 * SIZE_SZ, 0)
+      		|| __builtin_expect (chunksize_nomask (victim)
+    				   > av->system_mem, 0))
+    		malloc_printerr ("malloc(): memory corruption");
+首先获取当前unsorted\_bin中最先加入的chunk，对其大小进行检查，看是否符合规范。
+
+      	size = chunksize (victim);
+    	/*
+     	If a small request, try to use last remainder if it is the
+     	only chunk in unsorted bin.  This helps promote locality for
+     	runs of consecutive small requests. This is the only
+     	exception to best-fit, and applies only when there is
+     	no exact fit for a small chunk.
+       	*/
+如果当前申请chunk大小在smallbin范围内（即32bit小于512byte，64bit小于1024byte），且unsorted\_bin中只有一个chunk就为last\_remainder，同时满足该chunk的大小大于申请大小（nb）加上最小chunk的大小（32bit为0x10,64bit为0x20）。
+
+    	if (in_smallbin_range (nb) &&
+      		bck == unsorted_chunks (av) &&
+      		victim == av->last_remainder &&
+      		(unsigned long) (size) > (unsigned long) (nb + MINSIZE))
+    	{
+      		/* split and reattach remainder */
+      		remainder_size = size - nb;
+      		remainder = chunk_at_offset (victim, nb);
+      		unsorted_chunks (av)->bk = unsorted_chunks (av)->fd = remainder;
+      		av->last_remainder = remainder;
+      		remainder->bk = remainder->fd = unsorted_chunks (av);
+然后将切分后剩余大小的chunk放入unsorted\_bin中，并修改对应chunk的fd和bk指针。
+
+      		if (!in_smallbin_range (remainder_size))
+    		{
+      			remainder->fd_nextsize = NULL;
+      			remainder->bk_nextsize = NULL;
+    		}
+			//如果剩余chunk size大于smallbin范围，对其fd_nextsize和bk_nextsize指针进行清0
+    		set_head (victim, nb | PREV_INUSE | (av != &main_arena ? NON_MAIN_ARENA : 0));
+      		set_head (remainder, remainder_size | PREV_INUSE);
+      		set_foot (remainder, remainder_size);
+			//对victime chunk和remainder chunk的size字段进行修改
+    		check_malloced_chunk (av, victim, nb);
+      		void *p = chunk2mem (victim);
+      		alloc_perturb (p, bytes);
+      		return p;
+    	}
+然后对分配的victim chunk进行检查后，返回victim。
+
+### 3. unsorted\_bin最小满足分配法 ###
+
+
+     	/* remove from unsorted list */
+      	unsorted_chunks (av)->bk = bck;
+      	bck->fd = unsorted_chunks (av);
+		//把victim从unsorted_bin链表上取下
+    	/* Take now instead of binning if exact fit */
+    	if (size == nb)
+    	{
+      		set_inuse_bit_at_offset (victim, size);
+      		if (av != &main_arena)
+    			set_non_main_arena (victim);
+			check_malloced_chunk (av, victim, nb);
+			void *p = chunk2mem (victim);
+			alloc_perturb (p, bytes);
+			return p;
+		}
+如果victim chunk的size大小正好满足申请size（nb），则对victim chunk进行一系列初始化及检查后返回该chunk
+
+		/* place chunk in bin */
+		if (in_smallbin_range (size))
+		{
+			victim_index = smallbin_index (size);
+			bck = bin_at (av, victim_index);
+			fwd = bck->fd;
+		}
+		else
+		{
+			victim_index = largebin_index (size);
+			bck = bin_at (av, victim_index);
+			fwd = bck->fd;
+			/* maintain large bins in sorted order */
+			if (fwd != bck)
+			{
+				/* Or with inuse bit to speed comparisons */
+				size |= PREV_INUSE;
+				/* if smaller than smallest, bypass loop below */
+				assert (chunk_main_arena (bck->bk));
+				if ((unsigned long) (size) < (unsigned long) chunksize_nomask (bck->bk))
+				{
+					fwd = bck;
+					bck = bck->bk;
+					victim->fd_nextsize = fwd->fd;
+					victim->bk_nextsize = fwd->fd->bk_nextsize;
+					fwd->fd->bk_nextsize = victim->bk_nextsize->fd_nextsize = victim;
+				}
+				else
+				{
+					assert (chunk_main_arena (fwd));
+					while ((unsigned long) size < chunksize_nomask (fwd))
+					{
+						fwd = fwd->fd_nextsize;
+						assert (chunk_main_arena (fwd));
+					}
+					if ((unsigned long) size == (unsigned long) chunksize_nomask (fwd))
+						/* Always insert in the second position.  */
+						fwd = fwd->fd;
+					else
+					{
+						victim->fd_nextsize = fwd;
+						victim->bk_nextsize = fwd->bk_nextsize;
+						fwd->bk_nextsize = victim;
+						victim->bk_nextsize->fd_nextsize = victim;
+					}
+					bck = fwd->bk;
+				}
+			}
+			else
+				victim->fd_nextsize = victim->bk_nextsize = victim;
+		}
+		mark_bin (av, victim_index);
+		victim->bk = bck;
+		victim->fd = fwd;
+		fwd->bk = victim;
+		bck->fd = victim;
 
 # malloc_consolidate函数 #
 ## 1.函数功能 ##
