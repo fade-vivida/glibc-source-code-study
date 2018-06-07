@@ -472,7 +472,9 @@ bck->fd=bin
 			alloc_perturb (p, bytes);
 			return p;
 		}
-一种特殊情况，如果victim chunk的size大小正好满足申请size（nb），则对victim chunk进行一系列初始化及检查后返回该chunk
+一种特殊情况，如果victim chunk的size大小正好满足申请size（nb），则对victim chunk进行一系列初始化及检查后返回该chunk。  
+
+**注：这里其实也就是对smallbin的分配时机。因为smallbin是严格按照0x10大小递增的，因此如果不存在一个chunk的大小刚好满足申请大小，则肯定也能推出不存在在unsorted\_bin中的smallbin满足分配**
 
 #### 3.1） 对smallbin chunk进行整理 ####
 		/* place chunk in bin */
@@ -564,7 +566,9 @@ bck->fd=bin
         }
 		//如果累计处理的unsorted_bin中chunk大于10000个，则退出，避免浪费过多时间
 
-#### 3.3） 整理后再次使用largebin进行分配（largebin的真正分配代码） ####
+#### 3.3） 尝试使用当前largebin链表进行分配 ####
+**即本次分配主要是在nb大小所对应的largebin链表中尝试进行分配**  
+
 当把unsorted\_bin中的chunk都移动到smallbin或largebin中后，如果当前请求大小大于1024（不在smallbin范围内），则使用对应的largebin链表进行分配，遍历largebin链表寻找满足分配size（nb）的最小的chunk。由于相同size的chunk不链入fd\_nextsize,bk\_nextsize组成的链表中，因此如果找到的满足条件的chunk，其在fd,bk组成的链表中还有相同大小的chunk，则取位置第二的chunk，避免破坏fd\_nextsize,bk\_nextsize组成的链表。
 	
 		/*
@@ -627,10 +631,11 @@ bck->fd=bin
       			return p;
     		}
     	}
+#### 3.4） 在更大的bin中寻找满足分配大小的chunk ####
+**如果程序运行到了这里，说明nb所对应的bin链表中（包括smallbin和largebin）没有满足分配条件的chunk，因此不得不在更大的bin中寻找满足条件的chunk**  
 
-#### 3.4） 使用smallbin ####
-
-     	++idx;
+     	++idx;、
+		//这里的idx++表示在nb大小所属的bin链表（包括smallbin和largebin）中没有符合条件的chunk，则需要去更大的bin链表中继续进行寻找。
       	bin = bin_at (av, idx);
       	block = idx2block (idx);
       	map = av->binmap[block];
@@ -638,8 +643,10 @@ bck->fd=bin
     	for (;; )
     	{
       		/* Skip rest of block if there are no more set bits in this block.  */
+
       		if (bit > map || bit == 0)
     		{
+				//如果bit>map，表示当前block所表示的bin中，无满足条件的空闲块，则查看下一个block所表示的bin是否有符合条件的空闲chunk。
       			do
     			{
       				if (++block >= BINMAPSIZE) /* out of bins */
@@ -650,6 +657,7 @@ bck->fd=bin
       			bin = bin_at (av, (block << BINMAPSHIFT));
       			bit = 1;
     		}
+可以认为当前if是对block的检查，看当前block中是否有满足条件的bin链表，如果没有则无需再遍历当前block所包含的每个bin链表中的chunk（**具体实现就是使用bitmap加快分配的速度**）
     
       		/* Advance to bin with set bit. There must be one. */
       		while ((bit & map) == 0)
