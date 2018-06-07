@@ -481,6 +481,27 @@ bck->fd=bin
 			bck = bin_at (av, victim_index);
 			fwd = bck->fd;
 		}
+		......
+		......
+		mark_bin (av, victim_index);
+		victim->bk = bck;
+		victim->fd = fwd;
+		fwd->bk = victim;
+		bck->fd = victim;
+否则，如果victim size在smallbin的范围内，将victim chunk加入到对应的smallbin中，然后调用mark\_bin()函数。mark\_bin()函数的作用为标记对应的bin不为空，其定义如下所示。
+
+	#define BINMAPSHIFT      5
+	#define BITSPERMAP       (1U << BINMAPSHIFT)
+	#define BINMAPSIZE       (NBINS / BITSPERMAP)
+	#define idx2block(i)     ((i) >> BINMAPSHIFT)
+	#define idx2bit(i)       ((1U << ((i) & ((1U << BINMAPSHIFT) - 1))))
+    
+	#define mark_bin(m, i)		((m)->binmap[idx2block (i)] |= idx2bit (i))
+	//malloc_state的binmap字段为一个unsigned int型数组，该数组总共包含4个元素，刚好为128bit。
+	//用来表示对应的bins指针数组对应链表是否为空
+
+如果victim size不在smallbin范围内，则将其加入对应的largebin链表中，并维持同一个largbin链表中chunk大小的有序性（从大到小的顺序）。在这里需要注意的一点是，fd\_nextsize和bk\_nextsize两个指针的含义，这两个指针用来链接在同一个largebin链表中size不同的chunk，这一个链表也是有序的，顺序也是从大到小。
+
 		else
 		{
 			victim_index = largebin_index (size);
@@ -512,6 +533,7 @@ bck->fd=bin
 					if ((unsigned long) size == (unsigned long) chunksize_nomask (fwd))
 						/* Always insert in the second position.  */
 						fwd = fwd->fd;
+						//由于当前链表中已经存在该大小的chunk，因此不再将victim chunk链入fd_nextsize和bk_nextsize组成的链表中
 					else
 					{
 						victim->fd_nextsize = fwd;
@@ -530,6 +552,69 @@ bck->fd=bin
 		victim->fd = fwd;
 		fwd->bk = victim;
 		bck->fd = victim;
+
+如果当前请求大小大于1024（不在smallbin范围内），则使用对应的largebin链表进行分配，遍历largebin链表寻找满足分配size（nb）的最小的chunk。由于相同size的chunk不链入fd\_nextsize,bk\_nextsize组成的链表中，因此如果找到的满足条件的chunk，其在fd,bk组成的链表中还有相同大小的chunk，则取位置第二的chunk，避免破坏fd\_nextsize,bk\_nextsize组成的链表。
+	
+		/*
+    	If a large request, scan through the chunks of current bin in
+    	sorted order to find smallest that fits.  Use the skip list for this.
+       	*/
+    
+      	if (!in_smallbin_range (nb))
+    	{
+      		bin = bin_at (av, idx);
+    		/* skip scan if empty or largest chunk is too small */
+      		if ((victim = first (bin)) != bin && (unsigned long) chunksize_nomask (victim) >= (unsigned long)(nb))
+    		{
+      			victim = victim->bk_nextsize;
+      			while (((unsigned long) (size = chunksize (victim)) < (unsigned long) (nb)))
+    				victim = victim->bk_nextsize;
+    			/* Avoid removing the first entry for a size so that the skip
+     			list does not have to be rerouted.  */
+      			if (victim != last (bin) && chunksize_nomask (victim) == chunksize_nomask (victim->fd))
+    				victim = victim->fd;
+				//避免破坏fd_nextsize,bk_nextsize组成的链表
+    			remainder_size = size - nb;
+      			unlink (av, victim, bck, fwd);
+    			/* Exhaust */
+      			if (remainder_size < MINSIZE)
+    			{
+      				set_inuse_bit_at_offset (victim, size);
+      				if (av != &main_arena)
+    					set_non_main_arena (victim);
+					//如果剩余chunk大小小于最小的chunk size值（32bit：0x10，64bit：0x20），则将该chunk都分配给申请者
+    			}
+      			/* Split */
+      			else
+    			{
+      				remainder = chunk_at_offset (victim, nb);
+      				/* We cannot assume the unsorted list is empty and therefore
+     				have to perform a complete insert here.  */
+      				bck = unsorted_chunks (av);
+      				fwd = bck->fd;
+    		  		if (__glibc_unlikely (fwd->bk != bck))
+    					malloc_printerr ("malloc(): corrupted unsorted chunks");
+      				remainder->bk = bck;
+      				remainder->fd = fwd;
+      				bck->fd = remainder;
+      				fwd->bk = remainder;
+      				if (!in_smallbin_range (remainder_size))
+    				{
+      					remainder->fd_nextsize = NULL;
+      					remainder->bk_nextsize = NULL;
+    				}
+      				set_head (victim, nb | PREV_INUSE | (av != &main_arena ? NON_MAIN_ARENA : 0));
+      				set_head (remainder, remainder_size | PREV_INUSE);
+      				set_foot (remainder, remainder_size);
+    			}
+      			check_malloced_chunk (av, victim, nb);
+      			void *p = chunk2mem (victim);
+      			alloc_perturb (p, bytes);
+      			return p;
+    		}
+    	}
+
+
 
 # malloc_consolidate函数 #
 ## 1.函数功能 ##

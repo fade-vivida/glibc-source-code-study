@@ -1,0 +1,988 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>malloc_study</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+<style type="text/css">
+/* GitHub stylesheet for MarkdownPad (http://markdownpad.com) */
+/* Author: Nicolas Hery - http://nicolashery.com */
+/* Version: b13fe65ca28d2e568c6ed5d7f06581183df8f2ff */
+/* Source: https://github.com/nicolahery/markdownpad-github */
+
+/* RESET
+=============================================================================*/
+
+html, body, div, span, applet, object, iframe, h1, h2, h3, h4, h5, h6, p, blockquote, pre, a, abbr, acronym, address, big, cite, code, del, dfn, em, img, ins, kbd, q, s, samp, small, strike, strong, sub, sup, tt, var, b, u, i, center, dl, dt, dd, ol, ul, li, fieldset, form, label, legend, table, caption, tbody, tfoot, thead, tr, th, td, article, aside, canvas, details, embed, figure, figcaption, footer, header, hgroup, menu, nav, output, ruby, section, summary, time, mark, audio, video {
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+/* BODY
+=============================================================================*/
+
+body {
+  font-family: Helvetica, arial, freesans, clean, sans-serif;
+  font-size: 14px;
+  line-height: 1.6;
+  color: #333;
+  background-color: #fff;
+  padding: 20px;
+  max-width: 960px;
+  margin: 0 auto;
+}
+
+body>*:first-child {
+  margin-top: 0 !important;
+}
+
+body>*:last-child {
+  margin-bottom: 0 !important;
+}
+
+/* BLOCKS
+=============================================================================*/
+
+p, blockquote, ul, ol, dl, table, pre {
+  margin: 15px 0;
+}
+
+/* HEADERS
+=============================================================================*/
+
+h1, h2, h3, h4, h5, h6 {
+  margin: 20px 0 10px;
+  padding: 0;
+  font-weight: bold;
+  -webkit-font-smoothing: antialiased;
+}
+
+h1 tt, h1 code, h2 tt, h2 code, h3 tt, h3 code, h4 tt, h4 code, h5 tt, h5 code, h6 tt, h6 code {
+  font-size: inherit;
+}
+
+h1 {
+  font-size: 28px;
+  color: #000;
+}
+
+h2 {
+  font-size: 24px;
+  border-bottom: 1px solid #ccc;
+  color: #000;
+}
+
+h3 {
+  font-size: 18px;
+}
+
+h4 {
+  font-size: 16px;
+}
+
+h5 {
+  font-size: 14px;
+}
+
+h6 {
+  color: #777;
+  font-size: 14px;
+}
+
+body>h2:first-child, body>h1:first-child, body>h1:first-child+h2, body>h3:first-child, body>h4:first-child, body>h5:first-child, body>h6:first-child {
+  margin-top: 0;
+  padding-top: 0;
+}
+
+a:first-child h1, a:first-child h2, a:first-child h3, a:first-child h4, a:first-child h5, a:first-child h6 {
+  margin-top: 0;
+  padding-top: 0;
+}
+
+h1+p, h2+p, h3+p, h4+p, h5+p, h6+p {
+  margin-top: 10px;
+}
+
+/* LINKS
+=============================================================================*/
+
+a {
+  color: #4183C4;
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+/* LISTS
+=============================================================================*/
+
+ul, ol {
+  padding-left: 30px;
+}
+
+ul li > :first-child, 
+ol li > :first-child, 
+ul li ul:first-of-type, 
+ol li ol:first-of-type, 
+ul li ol:first-of-type, 
+ol li ul:first-of-type {
+  margin-top: 0px;
+}
+
+ul ul, ul ol, ol ol, ol ul {
+  margin-bottom: 0;
+}
+
+dl {
+  padding: 0;
+}
+
+dl dt {
+  font-size: 14px;
+  font-weight: bold;
+  font-style: italic;
+  padding: 0;
+  margin: 15px 0 5px;
+}
+
+dl dt:first-child {
+  padding: 0;
+}
+
+dl dt>:first-child {
+  margin-top: 0px;
+}
+
+dl dt>:last-child {
+  margin-bottom: 0px;
+}
+
+dl dd {
+  margin: 0 0 15px;
+  padding: 0 15px;
+}
+
+dl dd>:first-child {
+  margin-top: 0px;
+}
+
+dl dd>:last-child {
+  margin-bottom: 0px;
+}
+
+/* CODE
+=============================================================================*/
+
+pre, code, tt {
+  font-size: 12px;
+  font-family: Consolas, "Liberation Mono", Courier, monospace;
+}
+
+code, tt {
+  margin: 0 0px;
+  padding: 0px 0px;
+  white-space: nowrap;
+  border: 1px solid #eaeaea;
+  background-color: #f8f8f8;
+  border-radius: 3px;
+}
+
+pre>code {
+  margin: 0;
+  padding: 0;
+  white-space: pre;
+  border: none;
+  background: transparent;
+}
+
+pre {
+  background-color: #f8f8f8;
+  border: 1px solid #ccc;
+  font-size: 13px;
+  line-height: 19px;
+  overflow: auto;
+  padding: 6px 10px;
+  border-radius: 3px;
+}
+
+pre code, pre tt {
+  background-color: transparent;
+  border: none;
+}
+
+kbd {
+    -moz-border-bottom-colors: none;
+    -moz-border-left-colors: none;
+    -moz-border-right-colors: none;
+    -moz-border-top-colors: none;
+    background-color: #DDDDDD;
+    background-image: linear-gradient(#F1F1F1, #DDDDDD);
+    background-repeat: repeat-x;
+    border-color: #DDDDDD #CCCCCC #CCCCCC #DDDDDD;
+    border-image: none;
+    border-radius: 2px 2px 2px 2px;
+    border-style: solid;
+    border-width: 1px;
+    font-family: "Helvetica Neue",Helvetica,Arial,sans-serif;
+    line-height: 10px;
+    padding: 1px 4px;
+}
+
+/* QUOTES
+=============================================================================*/
+
+blockquote {
+  border-left: 4px solid #DDD;
+  padding: 0 15px;
+  color: #777;
+}
+
+blockquote>:first-child {
+  margin-top: 0px;
+}
+
+blockquote>:last-child {
+  margin-bottom: 0px;
+}
+
+/* HORIZONTAL RULES
+=============================================================================*/
+
+hr {
+  clear: both;
+  margin: 15px 0;
+  height: 0px;
+  overflow: hidden;
+  border: none;
+  background: transparent;
+  border-bottom: 4px solid #ddd;
+  padding: 0;
+}
+
+/* TABLES
+=============================================================================*/
+
+table th {
+  font-weight: bold;
+}
+
+table th, table td {
+  border: 1px solid #ccc;
+  padding: 6px 13px;
+}
+
+table tr {
+  border-top: 1px solid #ccc;
+  background-color: #fff;
+}
+
+table tr:nth-child(2n) {
+  background-color: #f8f8f8;
+}
+
+/* IMAGES
+=============================================================================*/
+
+img {
+  max-width: 100%
+}
+</style>
+<script type="text/javascript" src="directory.js"></script>
+</head>
+<body>
+<h1>Ptmalloc 源码学习</h1>
+<p><strong>注：在不经过特殊说明的情况下，以下研究结果均针对64-bit操作系统。</strong></p>
+<h1>malloc.c</h1>
+<h1>unlink宏</h1>
+<h2>1.函数功能</h2>
+<p>unlink()为双向链表的拆链函数，在ptmalloc中以宏的形式进行了定义，其具体定义如下所示：<br />
+<img src="https://raw.githubusercontent.com/fade-vivida/libc-linux-source-code-study/master/libc_study/picture/unlink.PNG" alt="unlink" />  </p>
+<h2>2.拆链前的检查操作</h2>
+<p>首先对要进行拆链的堆块P进行一系列的安全检查。</p>
+<h3>1）check 1</h3>
+<p>检查表达式：</p>
+<pre><code>if (__builtin_expect (chunksize(P) != prev_size (next_chunk(P)), 0))  \
+  malloc_printerr (&quot;corrupted size vs. prev_size&quot;);           \
+</code></pre>
+
+<p>check当前拆链的chunk_p的size字段，是否和下一个chunk的presize字段相等。其中__builtin_expect是GNU C特有的编译器的优化用法，作用为假设其第一个参数（或者是表达式的值）很大可能上与第二个参数相等，目的是为了加快流水线的执行速度。  </p>
+<p>对应错误信息：<br />
+<img src="https://raw.githubusercontent.com/fade-vivida/libc-linux-source-code-study/master/libc_study/picture/error1.PNG" alt="error1" /></p>
+<h3>2）check 2</h3>
+<pre><code>if (__builtin_expect (FD-&gt;bk != P || BK-&gt;fd != P, 0))         \
+  malloc_printerr (&quot;corrupted double-linked list&quot;);           \
+</code></pre>
+
+<p>经典的双向链表拆链前的验证操作，查看<br />
+FD-&gt;bk == chunk_P?<br />
+BK-&gt;fd == chunk_P?<br />
+其中FD = chunk_P-&gt;fd，BK = chunk_P-&gt;bk<br />
+对应错误信息：<br />
+<img src="https://raw.githubusercontent.com/fade-vivida/libc-linux-source-code-study/master/libc_study/picture/error2.PNG" alt="error2" /></p>
+<h3>3）check 3</h3>
+<p>检查当前chunk的size是否在smallbin的范围内，在64-bit下samllbin的大小最大为512byte。如果chunk_size&gt;512，则该chunk属于largebin，判断其fd_nextsize字段是否为NULL（其中fd_nextsize和bk_nextsize字段是largebin特有的）。</p>
+<pre><code>if (!in_smallbin_range (chunksize_nomask (P))            \
+&amp;&amp; __builtin_expect (P-&gt;fd_nextsize != NULL, 0)) {        \
+    if (__builtin_expect (P-&gt;fd_nextsize-&gt;bk_nextsize != P, 0)    \
+        || __builtin_expect (P-&gt;bk_nextsize-&gt;fd_nextsize != P, 0))\
+      malloc_printerr (&quot;corrupted double-linked list (not small)&quot;);   \
+</code></pre>
+
+<p>若fd_nextsize字段不为NULL，则判断largebin的双向链表是否完整（判断方法与smallbin相同，即chunk_P-&gt;fd_nextsize-&gt;bk_nextsize == chunk_P? &amp;&amp;<br />
+chunk_P-&gt;bk_nextsize-&gt;fd_nextsize == chunk_P?)<br />
+对应错误信息：<br />
+<img src="https://raw.githubusercontent.com/fade-vivida/libc-linux-source-code-study/master/libc_study/picture/error3.PNG" alt="error3" /></p>
+<h2>3.unlink操作</h2>
+<p>完成这一系列check后，则进行双向链表的拆链操作。  </p>
+<h3>1.chunk大小为smallbin</h3>
+<p>经典的拆链操作（其中FD = chunk_P-&gt;fd，BK = chunk_P-&gt;bk）：<br />
+FD-&gt;bk = BK<br />
+BK-&gt;fd = FD  </p>
+<h3>2.chunk大小为largebin</h3>
+<pre><code>if (FD-&gt;fd_nextsize == NULL) {                \
+    if (P-&gt;fd_nextsize == P)                  \
+        FD-&gt;fd_nextsize = FD-&gt;bk_nextsize = FD;       \
+    else {                            \
+        FD-&gt;fd_nextsize = P-&gt;fd_nextsize;             \
+        FD-&gt;bk_nextsize = P-&gt;bk_nextsize;             \
+        P-&gt;fd_nextsize-&gt;bk_nextsize = FD;             \
+        P-&gt;bk_nextsize-&gt;fd_nextsize = FD;             \
+    }                             \
+} 
+else {                            \
+    P-&gt;fd_nextsize-&gt;bk_nextsize = P-&gt;bk_nextsize;         \
+    P-&gt;bk_nextsize-&gt;fd_nextsize = P-&gt;fd_nextsize;         \
+}                                 \
+</code></pre>
+
+<p>动态调试结果：<br />
+<img src="https://raw.githubusercontent.com/fade-vivida/libc-linux-source-code-study/master/libc_study/picture/largebin.PNG" alt="largebin" /><br />
+疑惑点：关于fd_nextsize和bk_nextsize字段的作用。<br />
+首先判断fd，bk构成的双向链表中的前一个chunk是否为largebin，然后判断当前chunk的fd_nextsize字段是否指向自身。若是，表明当前chunk是第一个largebin chunk</p>
+<h1>_int_malloc(mstate av,size_t bytes)</h1>
+<h2>1.函数功能</h2>
+<p>用户申请size到实际分配chunk的管理。<br />
+函数执行流程如下所示：<br />
+Fastbin</p>
+<h2>2.Fastbin分配机制</h2>
+<h3>1. 调用checked_request2size(bytes,nb)得到真正的chunk大小</h3>
+<p>其中req为用户请求申请的chunk大小（也即用户可输入的数据大小），sz为进行规范化后chunk的实际大小（即malloc_chunk中的size字段），其中REQUEST_OUT_OF_RANGE宏定义为</p>
+<pre><code>#define REQUEST_OUT_OF_RANGE(req) ((unsigned long) (req) &gt;= (unsigned long) (INTERNAL_SIZE_T) (-2 * MINSIZE))
+//计算得到可申请的最大堆块大小为0xFFFFFFC0（即3.9G）     
+</code></pre>
+
+<p><img src="https://raw.githubusercontent.com/fade-vivida/libc-linux-source-code-study/master/libc_study/picture/checked_request2size.PNG" alt="request2size" /><br />
+可以看到，在check_request2size()中，又继续调用request2size()来得到实际chunk的size。<br />
+request2size()的实现代码如下所示：  </p>
+<pre><code>#define request2size(req) \
+  (((req) + SIZE_SZ + MALLOC_ALIGN_MASK &lt; MINSIZE)  ? \
+   MINSIZE :  \
+   ((req) + SIZE_SZ + MALLOC_ALIGN_MASK) &amp; ~MALLOC_ALIGN_MASK)
+</code></pre>
+
+<p>其中MINSIZE定义如下：</p>
+<pre><code>#define MINSIZE  \
+  (unsigned long)(((MIN_CHUNK_SIZE+MALLOC_ALIGN_MASK) &amp; ~MALLOC_ALIGN_MASK))
+  //其中 MALLOC_ALIGN_MASK = MALLOC_ALIGNMENT - 1，MALLOC_ALIGNMENT定义如下，反推可以得到MALLOC_ALIGN_MASK=0xF
+
+#define MALLOC_ALIGNMENT = (2*SIZE_T &lt; __alignof__(long double) ? __alignof__(long double):(2*SIZE_T)
+//__alignof__为一个宏定义，即得到对应数据类型的对齐值，在64-bit下__alignof__(long double)=16，也即MALLOC_ALIGNMENT=0x10
+</code></pre>
+
+<p>MIN_CHUNK_SIZE定义为：</p>
+<pre><code>#define MIN_CHUNK_SIZE(offsetof(struct malloc_chunk, fd_nextsize))
+//其中offsetof为一个宏定义，功能为计算得到fd_nextsize在malloc\_chunk结构体中的偏移（即宏定义返回值为0x20，64-bit）。
+//因此我们从这可以看出对于ptmalloc机制而言，最小分配的chunk大小为0x20（32-bit下最小chunk大小为0x10）。 
+</code></pre>
+
+<p>反推回去得知，MINSIZE = (0x20 + 0xF) &amp; 0xFFFFFFF0 = 0x20 （64-bits），32位下MINSZIE按照同样的计算方法为0x10。<br />
+至此，我们得到了request2size(req)函数的计算方法，代码如下所示：</p>
+<pre><code>if(req + 8 + 0xf &lt; 0x20)
+    return 0x20;
+else
+    return (req + 0x8 + 0xf) &amp; 0xfffffff0       //增加8byte字节后，对于16byte进行取整
+</code></pre>
+
+<p><strong>注：从这我们可以得到在ptmalloc机制中堆块重叠使用的根本原理所在，即如果当前堆块不为空，下一个堆块的presize字段可被当前堆块作为数据区使用。</strong></p>
+<h3>2.计算得到fastbin数组索引，进行拆链操作</h3>
+<p>首先查看当前arena是否可用（多线程下除main_arnea外，还存在其他arnea，具体数目为处理器内核数*2+1)，其中__glibc_unlikely宏实际调用的还是__builtin_expect()宏，功能为进行编译器优化，将最可能的执行结构放在跳转指令后，加大分支预测的成功率。这里__glibc_unlikely就为之后表达式不成功的概率较大。</p>
+<pre><code>/* There are no usable arenas.  Fall back to sysmalloc to get a chunk from
+ mmap.  */
+  if (__glibc_unlikely (av == NULL))
+{
+  void *p = sysmalloc (nb, av);
+  if (p != NULL)
+    alloc_perturb (p, bytes);
+  return p;
+}
+</code></pre>
+
+<p>然后判断当前申请chunk size(nb)是否满足fastbin大小，其中get<em>max</em>fast()函数在32-bit下返回值为0x50，在64-bit为下返回值为0xa0。</p>
+<pre><code>if ((unsigned long) (nb) &lt;= (unsigned long) (get_max_fast ())) //get max_size of fastbin:80(0x50,32-bit),160byte(0xa0,64-bit)
+{
+    idx = fastbin_index (nb);
+    mfastbinptr *fb = &amp;fastbin (av, idx);
+    mchunkptr pp;
+    victim = *fb;
+</code></pre>
+
+<p>然后使用fastbin_index计算当前chunk size所属的fastbin数组的索引，计算方法如下：</p>
+<pre><code>#define fastbin_index(sz) ((((unsigned int) (sz)) &gt;&gt; (SIZE_SZ == 8 ? 4 : 3)) - 2)
+</code></pre>
+
+<p>由于计算结果采用了不精确的计算方法，这其实就是为什么可以利用fastbin attack攻击的原理所在。<br />
+然后调用fastbin(av,idx)宏，得到当前chunk size所属fastbin数组元素的地址（fb），victim就为fastbin[idx]链表中第一个chunk节点。其中fastbin宏定义如下：</p>
+<pre><code>#define fastbin(ar_ptr, idx) ((ar_ptr)-&gt;fastbinsY[idx])
+</code></pre>
+
+<p>如果victime==NULL，表明当前fastbin链表为空，则无法使用fastbin进行分配，需要采用后续解决方法。如果victim!=NULL，首先判断当前程序是否为单线程。若是，取出fastbin链表中的第一个元素，也即最后加入的元素（因此，fastbi链表采用先进后出FILO原则)</p>
+<pre><code>if (victim != NULL)
+{
+    if (SINGLE_THREAD_P)
+        *fb = victim-&gt;fd;
+        //FILO
+    else
+        REMOVE_FB (fb, pp, victim);
+</code></pre>
+
+<p>如过当前程序为多线程，则使用REMOVE_FB宏进行fastbin链表的拆链操作。具体操作如下所示： </p>
+<pre><code>#define REMOVE_FB(fb, victim, pp)           
+do                          
+{
+    victim = pp;                    
+    if (victim == NULL)             
+        break;                      
+}                           
+while ((pp = catomic_compare_and_exchange_val_acq (fb, victim-&gt;fd, victim))!= victim);                  
+</code></pre>
+
+<p>其中catomic_compare_and_exchange_val_acq(mem,new_val,old_val)为一个原子比较交换操作，具体含义如下：</p>
+<pre><code>if(*mem == old_val){
+    *mem = new_val;
+}
+//返回值为new_val
+</code></pre>
+
+<p><strong>疑惑点：多线程下的REMOVE_FB操作是要讲所有的fastbin都从链表中拆除？</strong></p>
+<pre><code>if (__glibc_likely (victim != NULL))
+{
+    size_t victim_idx = fastbin_index (chunksize (victim));
+    //#define chunksize(p) (chunksize_nomask (p) &amp; ~(SIZE_BITS))
+    if (__builtin_expect (victim_idx != idx, 0))
+        malloc_printerr (&quot;malloc(): memory corruption (fast)&quot;);
+    check_remalloced_chunk (av, victim, nb);
+</code></pre>
+
+<p>然后调用chunksize()得到当前从fastbin链表中取下的victim chunk的大小，并计算得到其所属的fastbin数组的索引值（victim_idx)，并与当前该chunk所在的fastbin数组的索引下标作比较，看是否相等。  </p>
+<p><strong>注：这里引入了很重要的一点，即为什么我们在采用fastbin attack时，需要将fd指向一个符合当前fastbinY[idx]数组大小的位置（可以错位，且比较时是将size转化为一个unsigned int（32-bit））</strong></p>
+<h3>3.对从fastbin数组链表中获取到的victim，进行更为严格的检查</h3>
+<p>在对victim的size字段进行检查后，又调用了check_remalloced_chunk()对victim进行了更为细致的检查。check_remalloced_chunk()函数的定义如下所示：</p>
+<pre><code>do_check_remalloced_chunk (mstate av, mchunkptr p, INTERNAL_SIZE_T s)
+{
+    INTERNAL_SIZE_T sz = chunksize_nomask (p) &amp; ~(PREV_INUSE | NON_MAIN_ARENA);
+    //去除PREV_INUSE和NON_MAIN_ARENA字段
+    if (!chunk_is_mmapped (p))
+    {
+        //如果该chunk不是mmap分配，而是调用brk分配的。
+        assert (av == arena_for_chunk (p));
+        //调用arena_for_chunk宏，根据当前chunk的地址及size字段得到其所属的arnea
+        //arena_for_chunk(p)，如果p-&gt;size &amp; NON_MAIN_ARENA == 0,则返回&amp;main_arean
+        //否则返回(p&amp;(~(0x400*0x400-1)))-&gt;ar_ptr字段
+        if (chunk_main_arena (p))
+            assert (av == &amp;main_arena);
+        else
+            assert (av != &amp;main_arena);
+    }
+    do_check_inuse_chunk (av, p);
+    /* Legal size ... */
+    assert ((sz &amp; MALLOC_ALIGN_MASK) == 0);
+    assert ((unsigned long) (sz) &gt;= MINSIZE);
+    /* ... and alignment */
+    assert (aligned_OK (chunk2mem (p)));
+    /* chunk is less than MINSIZE more than request */
+    assert ((long) (sz) - (long) (s) &gt;= 0);
+    assert ((long) (sz) - (long) (s + MINSIZE) &lt; 0);
+} 
+</code></pre>
+
+<p>函数功能大体分析如下：<br />
+1. 检查该chunk所在的arena是否与之前传入函数的av相等。<strong>（注意点：使用fastbin attack攻击时，在构造伪chunk时，其size字段的IS_MAPPED(0x2)必须为1，这样才能绕过对于arean的检查）</strong><br />
+2. 调用do_check_inuse_chunk(av,p)，在do_check_inuse_chunk()函数中，还会调用do_check_chunk()函数首先对victim块进行相关检查，然后检查下一个chunk的PRE_INUSE是否置1（fastbin不合并，因此与其相邻的下一个chunk的PRE_INUSE字段永远为1）；并检查当前chunk的相邻chunk是否处于free状态，如果是，调用do_check_free_chunk对其进行检查。<br />
+3. 对申请chunk的大小进行检查，对victim的地址进行对齐检查。</p>
+<p>对取下的victim chunk进行检查后，是一些关于TCACHE机制的使用方法，具体会在之后的文章中进行分析。</p>
+<pre><code>#if USE_TCACHE
+/* While we're here, if we see other chunks of the same size, stash them in the tcache.  */
+size_t tc_idx = csize2tidx (nb);
+if (tcache &amp;&amp; tc_idx &lt; mp_.tcache_bins)
+{
+    mchunkptr tc_victim;
+    /* While bin not empty and tcache not full, copy chunks.  */
+    while (tcache-&gt;counts[tc_idx] &lt; mp_.tcache_count
+        &amp;&amp; (tc_victim = *fb) != NULL)
+    {
+        if (SINGLE_THREAD_P)
+            *fb = tc_victim-&gt;fd;
+        else
+        {
+            REMOVE_FB (fb, pp, tc_victim);
+            if (__glibc_unlikely (tc_victim == NULL))
+                break;
+        }
+        tcache_put (tc_victim, tc_idx);
+    }
+}
+#endif
+</code></pre>
+
+<p>TCACHE机制后，如果设置了perturb_byte，则调用alloc_pertrub对chunk的数据区进行填充。</p>
+<pre><code>void *p = chunk2mem (victim);
+alloc_perturb (p, bytes);
+return p;
+}}}
+</code></pre>
+
+<p>alloc_perturb()函数定义如下：</p>
+<pre><code>static void alloc_perturb (char *p, size_t n)
+{
+    if (__glibc_unlikely (perturb_byte))
+    memset (p, perturb_byte ^ 0xff, n);
+}
+</code></pre>
+
+<p>至此，在_int_malloc()函数中fastbin部分的分析结束。</p>
+<h2>3.SmallBin分配机制</h2>
+<pre><code>#define NSMALLBINS 64
+#define SMALLBIN_WIDTHMALLOC_ALIGNMENT
+#define SMALLBIN_CORRECTION (MALLOC_ALIGNMENT &gt; 2 * SIZE_SZ)
+#define MIN_LARGE_SIZE((NSMALLBINS - SMALLBIN_CORRECTION) * SMALLBIN_WIDTH)
+#define in_smallbin_range(sz) ((unsigned long) (sz) &lt; (unsigned long) MIN_LARGE_SIZE)
+
+
+if (in_smallbin_range (nb))
+{   
+    idx = smallbin_index (nb);
+    bin = bin_at (av, idx);
+    if ((victim = last (bin)) != bin)
+    {
+        bck = victim-&gt;bk;
+        if (__glibc_unlikely (bck-&gt;fd != victim))
+            malloc_printerr (&quot;malloc(): smallbin double linked list corrupted&quot;);
+        set_inuse_bit_at_offset (victim, nb);
+        bin-&gt;bk = bck;
+        bck-&gt;fd = bin;
+        if (av != &amp;main_arena)
+            set_non_main_arena (victim);
+        check_malloced_chunk (av, victim, nb);
+</code></pre>
+
+<h3>1.计算Smallbin数组索引</h3>
+<p>首先调用in_smallbin_range宏检查申请size是否在smallbin范围内。<br />
+<strong>注：重要结论！！！</strong>  <br />
+<strong>64-bit: &lt; 1024 byte，即最大的smallbin为1008（0x3f0）</strong><br />
+<strong>32-bit: &lt; 512  byte，即最大的smallbin为504（0x1f8）</strong>  </p>
+<pre><code>#define NBINS             128
+#define NSMALLBINS         64
+#define SMALLBIN_WIDTH    MALLOC_ALIGNMENT
+#define SMALLBIN_CORRECTION (MALLOC_ALIGNMENT &gt; 2 * SIZE_SZ)
+#define MIN_LARGE_SIZE    ((NSMALLBINS - SMALLBIN_CORRECTION) * SMALLBIN_WIDTH)
+#define in_smallbin_range(sz)  \
+  ((unsigned long) (sz) &lt; (unsigned long) MIN_LARGE_SIZE)
+</code></pre>
+
+<p>然后计算得到所属Smallbin的索引号，计算方法如下所示（即在64-bit下，idx = size/16 + SMALLBIN_CORRECTION；32-bit下，idx = size/8 + SMALLBIN_CORRECTION）：</p>
+<pre><code>#define smallbin_index(sz) ((SMALLBIN_WIDTH == 16 ? (((unsigned) (sz)) &gt;&gt; 4) : (((unsigned) (sz)) &gt;&gt; 3)) + SMALLBIN_CORRECTION)
+</code></pre>
+
+<p>然后根据索引号idx，计算得到该bin数组的地址。</p>
+<pre><code>#define bin_at(m, i) \
+  (mbinptr) (((char *) &amp;((m)-&gt;bins[((i) - 1) * 2])) - offsetof (struct malloc_chunk, fd))
+  //之所以要减去0x10，是因为smallbin是以双向链表的形式存在，fd指针在malloc_chunk结构中的偏移就是0x10
+  //因此如果把bin数组也当做一个malloc_chunk结构的话，则该chunk的地址就为fd指针地址减去0x10。
+</code></pre>
+
+<h3>2.检查链表完整性，并进行拆链操作</h3>
+<p>然后调用last(bin)检查当前bin链表中是否存在空闲的chunk。如果存在，取下最先放入该链表的chunk（FIFO，先入先出规则），并对链表的完整新进行检验（victim-&gt;bk-&gt;fd==victim?）。如果链表被破坏，打印出错误信息。<br />
+<img src="https://raw.githubusercontent.com/fade-vivida/libc-linux-source-code-study/master/libc_study/picture/small_double_linklist_corrupt.PNG" alt="smallbin double linked list corrupted" /><br />
+然后调用set_inuse_bit_at_offset()函数，标志当前chunk已被使用。</p>
+<pre><code>#define set_inuse_bit_at_offset(p, s) (((mchunkptr) (((char *) (p)) + (s)))-&gt;mchunk_size |= PREV_INUSE)
+</code></pre>
+
+<p>然后进行双向链表的拆链操作<br />
+bin-&gt;bk=bck<br />
+bck-&gt;fd=bin<br />
+如果当前arena不是main_arena，则设置victim的NON_MAIN_ARENA位。</p>
+<pre><code>bin-&gt;bk = bck;
+bck-&gt;fd = bin;
+if (av != &amp;main_arena)
+    set_non_main_arena (victim);
+</code></pre>
+
+<h3>3.对取下的chunk进检查</h3>
+<p>然后调用check_malloced_chunk()对victim进行一系列检查（check_malloced_chunk()会再次调用check_remalloced_chunk()，然后为TCACHE机制。</p>
+<pre><code>check_malloced_chunk (av, victim, nb);
+#if USE_TCACHE
+  /* While we're here, if we see other chunks of the same size,
+     stash them in the tcache.  */
+  size_t tc_idx = csize2tidx (nb);
+  if (tcache &amp;&amp; tc_idx &lt; mp_.tcache_bins)
+    {
+      mchunkptr tc_victim;
+
+      /* While bin not empty and tcache not full, copy chunks over.  */
+      while (tcache-&gt;counts[tc_idx] &lt; mp_.tcache_count
+         &amp;&amp; (tc_victim = last (bin)) != bin)
+    {
+      if (tc_victim != 0)
+        {
+          bck = tc_victim-&gt;bk;
+          set_inuse_bit_at_offset (tc_victim, nb);
+          if (av != &amp;main_arena)
+        set_non_main_arena (tc_victim);
+          bin-&gt;bk = bck;
+          bck-&gt;fd = bin;
+
+          tcache_put (tc_victim, tc_idx);
+            }
+    }
+    }
+#endif 
+</code></pre>
+
+<p>之后调用alloc_perturb()对分配chunk内容进行填充。</p>
+<pre><code>void *p = chunk2mem (victim);
+alloc_perturb (p, bytes);
+</code></pre>
+
+<p>至此SmallBin分配机制结束。</p>
+<h2>4.LargeBin分配机制</h2>
+<p>对于不满足fastbin和smallbin需求的chunk size，则会调用largebin分配机制。具体实现代码如下所示：</p>
+<pre><code>else
+{
+  idx = largebin_index (nb);
+  if (atomic_load_relaxed (&amp;av-&gt;have_fastchunks))
+    malloc_consolidate (av);
+}
+</code></pre>
+
+<p>其中largebin_index()的计算方法如下：</p>
+<pre><code>#define largebin_index(sz) (SIZE_SZ == 8 ? largebin_index_64 (sz) : MALLOC_ALIGNMENT == 16 ?    largebin_index_32_big (sz) : largebin_index_32 (sz))
+
+#define largebin_index_32(sz)                                                \
+    (((((unsigned long) (sz)) &gt;&gt; 6) &lt;= 38) ?  56 + (((unsigned long) (sz)) &gt;&gt; 6) :\
+    ((((unsigned long) (sz)) &gt;&gt; 9) &lt;= 20) ?  91 + (((unsigned long) (sz)) &gt;&gt; 9) :\
+    ((((unsigned long) (sz)) &gt;&gt; 12) &lt;= 10) ? 110 + (((unsigned long) (sz)) &gt;&gt; 12) :\
+    ((((unsigned long) (sz)) &gt;&gt; 15) &lt;= 4) ? 119 + (((unsigned long) (sz)) &gt;&gt; 15) :\
+    ((((unsigned long) (sz)) &gt;&gt; 18) &lt;= 2) ? 124 + (((unsigned long) (sz)) &gt;&gt; 18) :\
+    126)
+
+#define largebin_index_32_big(sz)                                            \
+    (((((unsigned long) (sz)) &gt;&gt; 6) &lt;= 45) ?  49 + (((unsigned long) (sz)) &gt;&gt; 6) :\
+    ((((unsigned long) (sz)) &gt;&gt; 9) &lt;= 20) ?  91 + (((unsigned long) (sz)) &gt;&gt; 9) :\
+    ((((unsigned long) (sz)) &gt;&gt; 12) &lt;= 10) ? 110 + (((unsigned long) (sz)) &gt;&gt; 12) :\
+    ((((unsigned long) (sz)) &gt;&gt; 15) &lt;= 4) ? 119 + (((unsigned long) (sz)) &gt;&gt; 15) :\
+    ((((unsigned long) (sz)) &gt;&gt; 18) &lt;= 2) ? 124 + (((unsigned long) (sz)) &gt;&gt; 18) :\
+    126)
+
+#define largebin_index_64(sz)                                                \
+    (((((unsigned long) (sz)) &gt;&gt; 6) &lt;= 48) ?  48 + (((unsigned long) (sz)) &gt;&gt; 6) :\
+    ((((unsigned long) (sz)) &gt;&gt; 9) &lt;= 20) ?  91 + (((unsigned long) (sz)) &gt;&gt; 9) :\
+    ((((unsigned long) (sz)) &gt;&gt; 12) &lt;= 10) ? 110 + (((unsigned long) (sz)) &gt;&gt; 12) :\
+    ((((unsigned long) (sz)) &gt;&gt; 15) &lt;= 4) ? 119 + (((unsigned long) (sz)) &gt;&gt; 15) :\
+    ((((unsigned long) (sz)) &gt;&gt; 18) &lt;= 2) ? 124 + (((unsigned long) (sz)) &gt;&gt; 18) :\
+    126)
+</code></pre>
+
+<p><strong>注：重要结论！！！</strong><br />
+<strong>32bit下，largebin的下限范围为：512 byte</strong><br />
+<strong>64bit下，largebin的下限范围为：1024 byte</strong><br />
+<strong>64bit下，largebin又分为33个区间大小都为64byte，15个区间大小为512byte,9个区间大小为4096byte等等的小区间</strong><br />
+</br>
+</br>
+<strong>注：CTF中的一个重要考点！！！</strong><br />
+<strong>如果分配的size最后需要调用largebin来满足，且当前fastbin链表中存在fastbin chunk（即arena的have_fastchunks字段为1，则会调用malloc_consolidata()函数对fastbin chunk进行合并，并加入到unsorted_bin中。</strong></p>
+<h2>5.UnsortedBin分配机制</h2>
+<h3>1. malloc源码关于unsortedbin分配的说明</h3>
+<pre><code> Process recently freed or remaindered chunks, taking one only if
+ it is exact fit, or, if this a small request, the chunk is remainder from
+ the most recent non-exact fit.  Place other traversed chunks in
+ bins.  Note that this step is the only place in any routine where
+ chunks are placed in bins.
+
+ The outer loop here is needed because we might not realize until
+ near the end of malloc that we should have consolidated, so must
+ do so and retry. This happens at most once, and only when we would
+ otherwise need to expand memory to service a &quot;small&quot; request.
+</code></pre>
+
+<p>大概意思为：unsortedbin分配处理事例是唯一能够将chunk从unsortedbin中放入其他bin的方法，并且使用unsortedbin分配时不是精确匹配，而是大于当前需要size的最小值。同时外层的循环的必要性是为了</p>
+<h3>2. 使用last_remainder进行分配</h3>
+<pre><code>while ((victim = unsorted_chunks (av)-&gt;bk) != unsorted_chunks (av))
+{
+    bck = victim-&gt;bk;
+    if (__builtin_expect (chunksize_nomask (victim) &lt;= 2 * SIZE_SZ, 0)
+        || __builtin_expect (chunksize_nomask (victim)
+                   &gt; av-&gt;system_mem, 0))
+        malloc_printerr (&quot;malloc(): memory corruption&quot;);
+</code></pre>
+
+<p>首先获取当前unsorted_bin中最先加入的chunk，对其大小进行检查，看是否符合规范。</p>
+<pre><code>    size = chunksize (victim);
+    /*
+    If a small request, try to use last remainder if it is the
+    only chunk in unsorted bin.  This helps promote locality for
+    runs of consecutive small requests. This is the only
+    exception to best-fit, and applies only when there is
+    no exact fit for a small chunk.
+    */
+</code></pre>
+
+<p>如果当前申请chunk大小在smallbin范围内（即32bit小于512byte，64bit小于1024byte），且unsorted_bin中只有一个chunk就为last_remainder，同时满足该chunk的大小大于申请大小（nb）加上最小chunk的大小（32bit为0x10,64bit为0x20）。</p>
+<pre><code>    if (in_smallbin_range (nb) &amp;&amp;
+        bck == unsorted_chunks (av) &amp;&amp;
+        victim == av-&gt;last_remainder &amp;&amp;
+        (unsigned long) (size) &gt; (unsigned long) (nb + MINSIZE))
+    {
+        /* split and reattach remainder */
+        remainder_size = size - nb;
+        remainder = chunk_at_offset (victim, nb);
+        unsorted_chunks (av)-&gt;bk = unsorted_chunks (av)-&gt;fd = remainder;
+        av-&gt;last_remainder = remainder;
+        remainder-&gt;bk = remainder-&gt;fd = unsorted_chunks (av);
+</code></pre>
+
+<p>然后将切分后剩余大小的chunk放入unsorted_bin中，并修改对应chunk的fd和bk指针。</p>
+<pre><code>        if (!in_smallbin_range (remainder_size))
+        {
+            remainder-&gt;fd_nextsize = NULL;
+            remainder-&gt;bk_nextsize = NULL;
+        }
+        //如果剩余chunk size大于smallbin范围，对其fd_nextsize和bk_nextsize指针进行清0
+        set_head (victim, nb | PREV_INUSE | (av != &amp;main_arena ? NON_MAIN_ARENA : 0));
+        set_head (remainder, remainder_size | PREV_INUSE);
+        set_foot (remainder, remainder_size);
+        //对victime chunk和remainder chunk的size字段进行修改
+        check_malloced_chunk (av, victim, nb);
+        void *p = chunk2mem (victim);
+        alloc_perturb (p, bytes);
+        return p;
+    }
+</code></pre>
+
+<p>然后对分配的victim chunk进行检查后，返回victim。</p>
+<h3>3. unsorted_bin最小满足分配法</h3>
+<pre><code>    /* remove from unsorted list */
+    unsorted_chunks (av)-&gt;bk = bck;
+    bck-&gt;fd = unsorted_chunks (av);
+    //把victim从unsorted_bin链表上取下
+    /* Take now instead of binning if exact fit */
+    if (size == nb)
+    {
+        set_inuse_bit_at_offset (victim, size);
+        if (av != &amp;main_arena)
+            set_non_main_arena (victim);
+        check_malloced_chunk (av, victim, nb);
+        void *p = chunk2mem (victim);
+        alloc_perturb (p, bytes);
+        return p;
+    }
+</code></pre>
+
+<p>如果victim chunk的size大小正好满足申请size（nb），则对victim chunk进行一系列初始化及检查后返回该chunk</p>
+<pre><code>    /* place chunk in bin */
+    if (in_smallbin_range (size))
+    {
+        victim_index = smallbin_index (size);
+        bck = bin_at (av, victim_index);
+        fwd = bck-&gt;fd;
+    }
+    else
+    {
+        victim_index = largebin_index (size);
+        bck = bin_at (av, victim_index);
+        fwd = bck-&gt;fd;
+        /* maintain large bins in sorted order */
+        if (fwd != bck)
+        {
+            /* Or with inuse bit to speed comparisons */
+            size |= PREV_INUSE;
+            /* if smaller than smallest, bypass loop below */
+            assert (chunk_main_arena (bck-&gt;bk));
+            if ((unsigned long) (size) &lt; (unsigned long) chunksize_nomask (bck-&gt;bk))
+            {
+                fwd = bck;
+                bck = bck-&gt;bk;
+                victim-&gt;fd_nextsize = fwd-&gt;fd;
+                victim-&gt;bk_nextsize = fwd-&gt;fd-&gt;bk_nextsize;
+                fwd-&gt;fd-&gt;bk_nextsize = victim-&gt;bk_nextsize-&gt;fd_nextsize = victim;
+            }
+            else
+            {
+                assert (chunk_main_arena (fwd));
+                while ((unsigned long) size &lt; chunksize_nomask (fwd))
+                {
+                    fwd = fwd-&gt;fd_nextsize;
+                    assert (chunk_main_arena (fwd));
+                }
+                if ((unsigned long) size == (unsigned long) chunksize_nomask (fwd))
+                    /* Always insert in the second position.  */
+                    fwd = fwd-&gt;fd;
+                else
+                {
+                    victim-&gt;fd_nextsize = fwd;
+                    victim-&gt;bk_nextsize = fwd-&gt;bk_nextsize;
+                    fwd-&gt;bk_nextsize = victim;
+                    victim-&gt;bk_nextsize-&gt;fd_nextsize = victim;
+                }
+                bck = fwd-&gt;bk;
+            }
+        }
+        else
+            victim-&gt;fd_nextsize = victim-&gt;bk_nextsize = victim;
+    }
+    mark_bin (av, victim_index);
+    victim-&gt;bk = bck;
+    victim-&gt;fd = fwd;
+    fwd-&gt;bk = victim;
+    bck-&gt;fd = victim;
+</code></pre>
+
+<h1>malloc_consolidate函数</h1>
+<h2>1.函数功能</h2>
+<pre><code>malloc_consolidate is a specialized version of free() that tears
+down chunks held in fastbins.  Free itself cannot be used for this
+purpose since, among other things, it might place chunks back onto
+fastbins.  So, instead, we need to use a minor variant of the same
+code.
+</code></pre>
+
+<p>Free()函数的特殊变种，可以实现对于fastbin链表中的chunk的回收处理。Free()函数本身无法完成这项工作。因为free()一个原本属于fastbin大小的chunk时，只会将该chunk加入到fastbin链表中。</p>
+<h2>2.合并fastbin chunk，将其加入unsortedbin</h2>
+<pre><code>static void malloc_consolidate(mstate av)
+{
+    mfastbinptr*fb; /* current fastbin being consolidated */
+    mfastbinptr*maxfb;  /* last fastbin (for loop control) */
+    mchunkptr   p;  /* current chunk being consolidated */
+    mchunkptr   nextp;  /* next chunk to consolidate */
+    mchunkptr   unsorted_bin;   /* bin header */
+    mchunkptr   first_unsorted; /* chunk to link to */
+
+    /* These have same use as in free() */
+    mchunkptr   nextchunk;
+    INTERNAL_SIZE_T size;
+    INTERNAL_SIZE_T nextsize;
+    INTERNAL_SIZE_T prevsize;
+    int nextinuse;
+    mchunkptr   bck;
+    mchunkptr   fwd;
+
+    atomic_store_relaxed (&amp;av-&gt;have_fastchunks, false);    
+    unsorted_bin = unsorted_chunks(av);
+</code></pre>
+
+<p>设置当前arena的fastchunk字段为null，标志当前arena无可用的fastbin。然后调用unsorted_chunk宏，得到unsortbin起始地址。</p>
+<pre><code>    /*
+    Remove each chunk from fast bin and consolidate it, placing it
+    then in unsorted bin. Among other reasons for doing this,
+    placing in unsorted bin avoids needing to calculate actual bins
+    until malloc is sure that chunks aren't immediately going to be
+    reused anyway.
+    */
+    maxfb = &amp;fastbin (av, NFASTBINS - 1);
+    //NFASTBINS = 10
+    //maxfb保存了最后一个fastbin数组元素的地址（即&amp;fastbinsY[9]）
+    fb = &amp;fastbin (av, 0);
+    //fb保存了fastbin数组第一个元素的地址（即&amp;fastbinsY[0]）
+    do {
+        p = atomic_exchange_acq (fb, NULL);
+        if (p != 0) {
+            do {
+                unsigned int idx = fastbin_index (chunksize (p));
+                if ((&amp;fastbin (av, idx)) != fb)
+                    malloc_printerr (&quot;malloc_consolidate(): invalid chunk size&quot;);
+</code></pre>
+
+<p>对从fastbin链表中取下的chunk进行size字段检验，看其是否属于当前fastbin链表。<br />
+错误信息：<br />
+<img src="https://raw.githubusercontent.com/fade-vivida/libc-linux-source-code-study/master/libc_study/picture/malloc_consolidata.PNG" alt="malloc_consolidata()error" />    				</p>
+<pre><code>                check_inuse_chunk(av, p);
+                nextp = p-&gt;fd;
+                /* Slightly streamlined version of consolidation code in free() */
+                之后的操作为对fastbin chunk的合并操作，与free()函数不同的是，在free()中fastbin chunk不合并。
+                size = chunksize (p);
+                nextchunk = chunk_at_offset(p, size);
+                nextsize = chunksize(nextchunk);
+
+                if (!prev_inuse(p)) {
+                    prevsize = prev_size (p);
+                    size += prevsize;
+                    //合并后的大小
+                    p = chunk_at_offset(p, -((long) prevsize));
+                    //得到前一个chunk的地址
+                    unlink(av, p, bck, fwd);
+                }
+</code></pre>
+
+<p>如果当前的chunk的前一个chunk为free状态（pre_inuse(p)==0)，则对前一个chunk进行unlink操作。</p>
+<pre><code>                if (nextchunk != av-&gt;top) {
+                    nextinuse = inuse_bit_at_offset(nextchunk, nextsize);
+                    //标志下一个chunk是否处于free状态                      
+                    if (!nextinuse) {
+                        size += nextsize;
+                        unlink(av, nextchunk, bck, fwd);
+                    }
+</code></pre>
+
+<p>如果下一个chunk（即nextchunk）也是free状态，将该chunk也从其所属的双向链表中拆下，进行合并。</p>
+<pre><code>                    else
+                        clear_inuse_bit_at_offset(nextchunk, 0);
+                        //由于free函数中，fastbin不合并的原因，因此标志fastbin chunk是否使用的pre_inuse一直为1，在这需对其进行清0，以表示新合并的chunk p处于free状态。
+                    first_unsorted = unsorted_bin-&gt;fd;
+                    unsorted_bin-&gt;fd = p;
+                    first_unsorted-&gt;bk = p;
+                    if (!in_smallbin_range (size)) {
+                        p-&gt;fd_nextsize = NULL;
+                        p-&gt;bk_nextsize = NULL;
+                    }
+</code></pre>
+
+<p>如果合并后的chunk size不在smallbin的范围内，则将新chunk的fd_nextsize和bk_nextsize字段清0。</p>
+<pre><code>                    set_head(p, size | PREV_INUSE);
+                    //设置chunk p的size字段，并标志chunk p的前一个chunk为使用状态
+                    p-&gt;bk = unsorted_bin;
+                    p-&gt;fd = first_unsorted;
+</code></pre>
+
+<p>以下4条语句的功能就为把新合并的chunk p加入到unsortedbin中。<br />
+unsorted_bin-&gt;fd = p<br />
+p-&gt;fd = first_unsorted<br />
+first_unsorted-&gt;bk = p<br />
+p-&gt;bk = unsorted_bin</p>
+<pre><code>                    set_foot(p, size);
+</code></pre>
+
+<p>然后设置下一个chunk的presize字段为当前chunk p的size。</p>
+<pre><code>                }
+                else {
+                    size += nextsize;
+                    set_head(p, size | PREV_INUSE);
+                    av-&gt;top = p;
+                }
+</code></pre>
+
+<p>如果新合并的chunk p的下一个chunk为top_chunk，则将其整个合并到top_chunk中。</p>
+<pre><code>            } while ( (p = nextp) != 0);
+</code></pre>
+
+<p>循环对当前fastbin链表中的chunk进行同样的操作。    </p>
+<pre><code>        }
+  } while (fb++ != maxfb);
+}
+</code></pre>
+
+<p>循环对所有的fastbin链表进行同样的操作。</p>
+
+</body>
+</html>
+<!-- This document was created with MarkdownPad, the Markdown editor for Windows (http://markdownpad.com) -->
