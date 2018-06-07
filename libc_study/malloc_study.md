@@ -61,16 +61,137 @@ BK->fd = FD
 
 动态调试结果：  
 ![largebin](https://raw.githubusercontent.com/fade-vivida/libc-linux-source-code-study/master/libc_study/picture/largebin.PNG)  
-疑惑点：关于fd\_nextsize和bk\_nextsize字段的作用。  
-首先判断fd，bk构成的双向链表中的前一个chunk是否为largebin，然后判断当前chunk的fd\_nextsize字段是否指向自身。若是，表明当前chunk是第一个largebin chunk
+由于fd\_nextsize和bk\_nextsize是链接同一个largebin中不同size的指针，因此首先通过判断FD->fd\_nextsize==NULL？可以得知在当前链表中是否存在相同大小的chunk，然后对两个链表都进行拆链。  
+**疑问点：如果largebin链表中存在相同大小的chunk，则每次拆下的也是第二个chunk，并不会影响fd\_nextsize，bk\_nextsize组成的链表啊**
+
+# malloc_consolidate函数 #
+## 1.函数功能 ##
+    malloc_consolidate is a specialized version of free() that tears
+	down chunks held in fastbins.  Free itself cannot be used for this
+    purpose since, among other things, it might place chunks back onto
+    fastbins.  So, instead, we need to use a minor variant of the same
+    code.
+Free()函数的特殊变种，可以实现对于fastbin链表中的chunk的回收处理，将其加入到unsortedbin中。Free()函数本身无法完成这项工作。因为使用free()函数释放一个原本属于fastbin大小的chunk时，只会将该chunk加入到fastbin链表中。
+## 2.合并fastbin chunk，将其加入unsortedbin ##
+
+    static void malloc_consolidate(mstate av)
+    {
+      	mfastbinptr*fb; /* current fastbin being consolidated */
+      	mfastbinptr*maxfb;  /* last fastbin (for loop control) */
+      	mchunkptr   p;  /* current chunk being consolidated */
+      	mchunkptr   nextp;  /* next chunk to consolidate */
+      	mchunkptr   unsorted_bin;   /* bin header */
+      	mchunkptr   first_unsorted; /* chunk to link to */
+    
+      	/* These have same use as in free() */
+      	mchunkptr   nextchunk;
+      	INTERNAL_SIZE_T size;
+      	INTERNAL_SIZE_T nextsize;
+      	INTERNAL_SIZE_T prevsize;
+      	int nextinuse;
+      	mchunkptr   bck;
+      	mchunkptr   fwd;
+    
+      	atomic_store_relaxed (&av->have_fastchunks, false);    
+      	unsorted_bin = unsorted_chunks(av);
+设置当前arena的fastchunk字段为null，标志当前arena无可用的fastbin。然后调用unsorted\_chunk宏，得到unsortbin起始地址。
+
+      	/*
+      	Remove each chunk from fast bin and consolidate it, placing it
+      	then in unsorted bin. Among other reasons for doing this,
+      	placing in unsorted bin avoids needing to calculate actual bins
+      	until malloc is sure that chunks aren't immediately going to be
+      	reused anyway.
+      	*/
+     	maxfb = &fastbin (av, NFASTBINS - 1);
+		//NFASTBINS = 10
+		//maxfb保存了最后一个fastbin数组元素的地址（即&fastbinsY[9]）
+      	fb = &fastbin (av, 0);
+		//fb保存了fastbin数组第一个元素的地址（即&fastbinsY[0]）
+      	do {
+    		p = atomic_exchange_acq (fb, NULL);
+    		if (p != 0) {
+      			do {
+					unsigned int idx = fastbin_index (chunksize (p));
+	    	  		if ((&fastbin (av, idx)) != fb)
+	    				malloc_printerr ("malloc_consolidate(): invalid chunk size");
+对从fastbin链表中取下的chunk进行size字段检验，看其是否属于当前fastbin链表。  
+错误信息：  
+![malloc_consolidata()error](https://raw.githubusercontent.com/fade-vivida/libc-linux-source-code-study/master/libc_study/picture/malloc_consolidata.PNG)    				
+
+    				check_inuse_chunk(av, p);
+    				nextp = p->fd;
+    				/* Slightly streamlined version of consolidation code in free() */
+    				之后的操作为对fastbin chunk的合并操作，与free()函数不同的是，在free()中fastbin chunk不合并。
+					size = chunksize (p);
+    				nextchunk = chunk_at_offset(p, size);
+    				nextsize = chunksize(nextchunk);
+    				
+			    	if (!prev_inuse(p)) {
+			    	  	prevsize = prev_size (p);
+			    	  	size += prevsize;
+						//合并后的大小
+			    	  	p = chunk_at_offset(p, -((long) prevsize));
+						//得到前一个chunk的地址
+			    	  	unlink(av, p, bck, fwd);
+			    	}
+如果当前的chunk的前一个chunk为free状态（pre_inuse(p)==0)，则对前一个chunk进行unlink操作。
+
+    				if (nextchunk != av->top) {
+    	  				nextinuse = inuse_bit_at_offset(nextchunk, nextsize);
+						//标志下一个chunk是否处于free状态		    			
+						if (!nextinuse) {
+    						size += nextsize;
+    						unlink(av, nextchunk, bck, fwd);
+    	  				}
+如果下一个chunk（即nextchunk）也是free状态，将该chunk也从其所属的双向链表中拆下，进行合并。
+ 
+						else
+    						clear_inuse_bit_at_offset(nextchunk, 0);
+							//由于free函数中，fastbin不合并的原因，因此标志fastbin chunk是否使用的pre_inuse一直为1，在这需对其进行清0，以表示新合并的chunk p处于free状态。
+	    				first_unsorted = unsorted_bin->fd;
+				    	unsorted_bin->fd = p;
+				    	first_unsorted->bk = p;
+    					if (!in_smallbin_range (size)) {
+    						p->fd_nextsize = NULL;
+    						p->bk_nextsize = NULL;
+    	  				}
+如果合并后的chunk size不在smallbin的范围内，则将新chunk的fd\_nextsize和bk\_nextsize字段清0。
+
+    					set_head(p, size | PREV_INUSE);
+						//设置chunk p的size字段，并标志chunk p的前一个chunk为使用状态
+			    	  	p->bk = unsorted_bin;
+			    	  	p->fd = first_unsorted;
+以下4条语句的功能就为把新合并的chunk p加入到unsortedbin中。  
+unsorted\_bin->fd = p  
+p->fd = first\_unsorted  
+first\_unsorted->bk = p  
+p->bk = unsorted\_bin
+
+			    	  	set_foot(p, size);
+然后设置下一个chunk的presize字段为当前chunk p的size。
+
+    				}
+    				else {
+		    	  		size += nextsize;
+		    	  		set_head(p, size | PREV_INUSE);
+		    	  		av->top = p;
+    				}
+如果新合并的chunk p的下一个chunk为top\_chunk，则将其整个合并到top\_chunk中。
+
+    			} while ( (p = nextp) != 0);
+循环对当前fastbin链表中的chunk进行同样的操作。    
+
+    		}
+      } while (fb++ != maxfb);
+	}
+循环对所有的fastbin链表进行同样的操作。
 
 
-# \_int\_malloc(mstate av,size_t bytes) #
+
+# \_int\_malloc(mstate av,size_t bytes)函数 #
 ## 1.函数功能 ##
 用户申请size到实际分配chunk的管理。  
-函数执行流程如下所示：  
-Fastbin
-
 ## 2.Fastbin分配机制 ##
 ### 1. 调用checked\_request2size(bytes,nb)得到真正的chunk大小 ###
 其中req为用户请求申请的chunk大小（也即用户可输入的数据大小），sz为进行规范化后chunk的实际大小（即malloc\_chunk中的size字段），其中REQUEST\_OUT\_OF\_RANGE宏定义为
@@ -309,7 +430,7 @@ bck->fd=bin
     bck->fd = bin;
     if (av != &main_arena)
     	set_non_main_arena (victim);
-### 3.对取下的chunk进检查 ###
+### 3.对取下的chunk进行检查 ###
 然后调用check\_malloced\_chunk()对victim进行一系列检查（check\_malloced\_chunk()会再次调用check\_remalloced\_chunk()，然后为TCACHE机制。
 
 	check_malloced_chunk (av, victim, nb);
@@ -391,7 +512,7 @@ bck->fd=bin
 **注：CTF中的一个重要考点！！！**  
 **如果分配的size最后需要调用largebin来满足，且当前fastbin链表中存在fastbin chunk（即arena的have\_fastchunks字段为1，则会调用malloc\_consolidata()函数对fastbin chunk进行合并，并加入到unsorted_bin中。**
 
-## 5.UnsortedBin分配机制 ##
+## 5.UnsortedBin整理分配机制 ##
 ### 1）. malloc源码关于unsortedbin分配的说明 ###
 	 Process recently freed or remaindered chunks, taking one only if
      it is exact fit, or, if this a small request, the chunk is remainder from
@@ -403,9 +524,12 @@ bck->fd=bin
      near the end of malloc that we should have consolidated, so must
      do so and retry. This happens at most once, and only when we would
      otherwise need to expand memory to service a "small" request.
-大概意思为：unsortedbin分配处理事例是唯一能够将chunk从unsortedbin中放入其他bin的方法，并且使用unsortedbin分配时不是精确匹配，而是大于当前需要size的最小值。同时外层的循环的必要性是为了
-### 2）. 使用last\_remainder进行分配 ###
+	for (;; )
+    {
+      	int iters = 0;
+大概意思为：unsortedbin分配处理事例是唯一能够将chunk从unsortedbin中放入其他bin的方法，并且使用unsortedbin分配时不是精确匹配，而是大于等于当前需求大小nb的最小值。同时外层的循环的必要性是为了在最后对fastbin进行合并后，重新寻找适合的chunk。（之多循环一次）。
 
+### 2）. 使用last\_remainder进行分配 ###
     while ((victim = unsorted_chunks (av)->bk) != unsorted_chunks (av))
     {
 		bck = victim->bk;
@@ -474,7 +598,7 @@ bck->fd=bin
 		}
 一种特殊情况，如果victim chunk的size大小正好满足申请size（nb），则对victim chunk进行一系列初始化及检查后返回该chunk。  
 
-**注：这里其实也就是对smallbin的分配时机。因为smallbin是严格按照0x10大小递增的，因此如果不存在一个chunk的大小刚好满足申请大小，则肯定也能推出不存在在unsorted\_bin中的smallbin满足分配**
+**注：这里其实也就是对smallbin的分配时机。因为smallbin是严格按照0x10大小递增的，因此如果不存在一个chunk的大小刚好满足申请大小，则肯定也能推出整理后的smallbin中不存在chunk满足分配**
 
 #### 3.1） 对smallbin chunk进行整理 ####
 		/* place chunk in bin */
@@ -504,7 +628,7 @@ bck->fd=bin
 	//用来表示对应的bins指针数组对应链表是否为空
 
 #### 3.2） 对largebin chunk进行整理 ####
-如果victim size不在smallbin范围内，则将其加入对应的largebin链表中，并维持同一个largbin链表中chunk大小的有序性（从大到小的顺序）。在这里需要注意的一点是，fd\_nextsize和bk\_nextsize两个指针的含义，这两个指针用来链接在同一个largebin链表中size不同的chunk，这一个链表也是有序的，顺序也是从大到小。  
+如果victim size不在smallbin范围内，则将其加入对应的largebin链表中，并维持同一个largbin链表中chunk大小的有序性（从大到小的顺序）。在这里需要注意的一点是，fd\_nextsize和bk\_nextsize两个指针的含义，这两个指针用来链接在同一个largebin链表中不同size的chunk，这一个链表也是有序的，顺序也是从大到小。  
 即假设存在5个chunk，A0,A1,A2,B0,C0（其中A0=A1=A2，C0>B0>A0）  
 则由fd、bk组成的链表为：C0 || B0 || A0 || A1 || A2  
 有fd\_nextsize、bk\_nextsize组成链表为：C0 || B0 || A0
@@ -528,6 +652,7 @@ bck->fd=bin
 					victim->fd_nextsize = fwd->fd;
 					victim->bk_nextsize = fwd->fd->bk_nextsize;
 					fwd->fd->bk_nextsize = victim->bk_nextsize->fd_nextsize = victim;
+					//如果victim的size小于链表中最小的chunk，则不用再进行遍历链表，直接将其加到最后即可
 				}
 				else
 				{
@@ -537,6 +662,7 @@ bck->fd=bin
 						fwd = fwd->fd_nextsize;
 						assert (chunk_main_arena (fwd));
 					}
+					//遍历链表，寻找小于等于victim的chunk
 					if ((unsigned long) size == (unsigned long) chunksize_nomask (fwd))
 						/* Always insert in the second position.  */
 						fwd = fwd->fd;
@@ -567,7 +693,7 @@ bck->fd=bin
 		//如果累计处理的unsorted_bin中chunk大于10000个，则退出，避免浪费过多时间
 
 #### 3.3） 尝试使用当前largebin链表进行分配 ####
-**即本次分配主要是在nb大小所对应的largebin链表中尝试进行分配**  
+**即本次分配主要是在nb大小所对应的largebin链表中尝试进行分配，之所以要有此步骤是因为同一个largebin链表中的chunk size是不同的，这一点与smallbin不相同**  
 
 当把unsorted\_bin中的chunk都移动到smallbin或largebin中后，如果当前请求大小大于1024（不在smallbin范围内），则使用对应的largebin链表进行分配，遍历largebin链表寻找满足分配size（nb）的最小的chunk。由于相同size的chunk不链入fd\_nextsize,bk\_nextsize组成的链表中，因此如果找到的满足条件的chunk，其在fd,bk组成的链表中还有相同大小的chunk，则取位置第二的chunk，避免破坏fd\_nextsize,bk\_nextsize组成的链表。
 	
@@ -601,7 +727,7 @@ bck->fd=bin
 					//如果剩余chunk大小小于最小的chunk size值（32bit：0x10，64bit：0x20），则将该chunk都分配给申请者
     			}
       			/* Split */
-如果从largebin链表上取下的chunk size大于（nb+MINSIZE），则将剩余remainder chunk（从victim chunk中切下nb大小的空间）加入到unsorted\_bin链表中，并对victim chunk和remainder chunk进行初始化。
+如果从largebin链表上取下的chunk size大于（nb+MINSIZE），则将剩余remainder chunk（从victim chunk中切下nb大小的空间）加入到unsorted\_bin链表中，并对victim chunk和remainder chunk进行初始化；否则返回整个chunk。
 
       			else
     			{
@@ -631,7 +757,7 @@ bck->fd=bin
       			return p;
     		}
     	}
-#### 3.4） 在更大的bin中寻找满足分配大小的chunk ####
+#### 3.4） 遍历bin数组，寻找满足分配大小的chunk ####
 **如果程序运行到了这里，说明nb所对应的bin链表中（包括smallbin和largebin）没有满足分配条件的chunk，因此不得不在更大的bin中寻找满足条件的chunk**  
 
      	++idx;、
@@ -657,7 +783,8 @@ bck->fd=bin
       			bin = bin_at (av, (block << BINMAPSHIFT));
       			bit = 1;
     		}
-可以认为当前if是对block的检查，看当前block中是否有满足条件的bin链表，如果没有则无需再遍历当前block所包含的每个bin链表中的chunk（**具体实现就是使用bitmap加快分配的速度**）
+			//可以认为当前if是对block的检查，看当前block中是否有满足条件的bin链表，如果没有则无需再遍历当前block所包含的每个bin链表中的chunk（具体实现就是使用bitmap加快分配的速度）
+
     
       		/* Advance to bin with set bit. There must be one. */
       		while ((bit & map) == 0)
@@ -666,18 +793,21 @@ bck->fd=bin
       			bit <<= 1;
       			assert (bit != 0);
     		}
-    
+    		//遍历当前block所能表示的bin，寻找一个非空闲的最小的bin链表。
+
       		/* Inspect the bin. It is likely to be non-empty */
       		victim = last (bin);
-    
+    		//取bin链表中的最后一个元素（即smallbin中最先加入的chunk或者largebin中size最小的chunk）
       		/*  If a false alarm (empty bin), clear the bit. */
       		if (victim == bin)
     		{
       			av->binmap[block] = map &= ~bit; /* Write through */
       			bin = next_bin (bin);
       			bit <<= 1;
+				//当前bin链表为空
     		}
-    
+之后的操作与之前对largebin链表进行的操作相同，只不过此时不需要再对链表中的chunk进行遍历。直接选择该链表中的最后一个chunk即可（对于smallbin所有chunk大小相同，对于largebin最后一个chunk最小且肯定满足需求大小nb）。
+
       		else
     		{
       			size = chunksize (victim);
@@ -717,6 +847,9 @@ bck->fd=bin
       				/* advertise as last remainder */
       				if (in_smallbin_range (nb))
     					av->last_remainder = remainder;
+**注：一个不同之处，如果当前申请的size在smallbin范围内，则改写av->last\_remainder字段为remainder chunk。**  
+**疑问点：这么做的好处是利用局部性原理，下次分配有很大可能也是smallbin？**
+
       				if (!in_smallbin_range (remainder_size))
     				{
       					remainder->fd_nextsize = NULL;
@@ -732,128 +865,71 @@ bck->fd=bin
       			return p;
     		}
     	}
+## 6.Top chunk分配机制 ##
+如果fastbin，smallbin，largebin，unsortedbin中都不存在满足分配条件的chunk，则使用top chunk进行分配。
 
-# malloc_consolidate函数 #
-## 1.函数功能 ##
-    malloc_consolidate is a specialized version of free() that tears
-	down chunks held in fastbins.  Free itself cannot be used for this
-    purpose since, among other things, it might place chunks back onto
-    fastbins.  So, instead, we need to use a minor variant of the same
-    code.
-Free()函数的特殊变种，可以实现对于fastbin链表中的chunk的回收处理。Free()函数本身无法完成这项工作。因为free()一个原本属于fastbin大小的chunk时，只会将该chunk加入到fastbin链表中。
-## 2.合并fastbin chunk，将其加入unsortedbin ##
-
-    static void malloc_consolidate(mstate av)
-    {
-      	mfastbinptr*fb; /* current fastbin being consolidated */
-      	mfastbinptr*maxfb;  /* last fastbin (for loop control) */
-      	mchunkptr   p;  /* current chunk being consolidated */
-      	mchunkptr   nextp;  /* next chunk to consolidate */
-      	mchunkptr   unsorted_bin;   /* bin header */
-      	mchunkptr   first_unsorted; /* chunk to link to */
-    
-      	/* These have same use as in free() */
-      	mchunkptr   nextchunk;
-      	INTERNAL_SIZE_T size;
-      	INTERNAL_SIZE_T nextsize;
-      	INTERNAL_SIZE_T prevsize;
-      	int nextinuse;
-      	mchunkptr   bck;
-      	mchunkptr   fwd;
-    
-      	atomic_store_relaxed (&av->have_fastchunks, false);    
-      	unsorted_bin = unsorted_chunks(av);
-设置当前arena的fastchunk字段为null，标志当前arena无可用的fastbin。然后调用unsorted\_chunk宏，得到unsortbin起始地址。
-
+    	use_top:
       	/*
-      	Remove each chunk from fast bin and consolidate it, placing it
-      	then in unsorted bin. Among other reasons for doing this,
-      	placing in unsorted bin avoids needing to calculate actual bins
-      	until malloc is sure that chunks aren't immediately going to be
-      	reused anyway.
-      	*/
-     	maxfb = &fastbin (av, NFASTBINS - 1);
-		//NFASTBINS = 10
-		//maxfb保存了最后一个fastbin数组元素的地址（即&fastbinsY[9]）
-      	fb = &fastbin (av, 0);
-		//fb保存了fastbin数组第一个元素的地址（即&fastbinsY[0]）
-      	do {
-    		p = atomic_exchange_acq (fb, NULL);
-    		if (p != 0) {
-      			do {
-					unsigned int idx = fastbin_index (chunksize (p));
-	    	  		if ((&fastbin (av, idx)) != fb)
-	    				malloc_printerr ("malloc_consolidate(): invalid chunk size");
-对从fastbin链表中取下的chunk进行size字段检验，看其是否属于当前fastbin链表。  
-错误信息：  
-![malloc_consolidata()error](https://raw.githubusercontent.com/fade-vivida/libc-linux-source-code-study/master/libc_study/picture/malloc_consolidata.PNG)    				
+     	If large enough, split off the chunk bordering the end of memory
+     	(held in av->top). Note that this is in accord with the best-fit
+     	search rule.  In effect, av->top is treated as larger (and thus
+     	less well fitting) than any other available chunk since it can
+     	be extended to be as large as necessary (up to system
+     	limitations).
+    
+     	We require that av->top always exists (i.e., has size >=
+     	MINSIZE) after initialization, so if it would otherwise be
+     	exhausted by current request, it is replenished. (The main
+     	reason for ensuring it exists is that we may need MINSIZE space
+     	to put in fenceposts in sysmalloc.)
+       	*/
+    	
+		victim = av->top;
+      	size = chunksize (victim);
+    	if ((unsigned long) (size) >= (unsigned long) (nb + MINSIZE))
+    	{
+      		remainder_size = size - nb;
+      		remainder = chunk_at_offset (victim, nb);
+      		av->top = remainder;
+      		set_head (victim, nb | PREV_INUSE | (av != &main_arena ? NON_MAIN_ARENA : 0));
+      		set_head (remainder, remainder_size | PREV_INUSE);
+    
+      		check_malloced_chunk (av, victim, nb);
+      		void *p = chunk2mem (victim);
+      		alloc_perturb (p, bytes);
+      		return p;
+			//对top chunk进行拆分
+    	}
+如果当前top_chunk的大小不满足分配大小，且当前fastbin链表中存在空闲chunk，则调用malloc\_consolidate对fastbin中的chunk进行合并（碎片化导致分配空间不足）。
 
-    				check_inuse_chunk(av, p);
-    				nextp = p->fd;
-    				/* Slightly streamlined version of consolidation code in free() */
-    				之后的操作为对fastbin chunk的合并操作，与free()函数不同的是，在free()中fastbin chunk不合并。
-					size = chunksize (p);
-    				nextchunk = chunk_at_offset(p, size);
-    				nextsize = chunksize(nextchunk);
-    				
-			    	if (!prev_inuse(p)) {
-			    	  	prevsize = prev_size (p);
-			    	  	size += prevsize;
-						//合并后的大小
-			    	  	p = chunk_at_offset(p, -((long) prevsize));
-						//得到前一个chunk的地址
-			    	  	unlink(av, p, bck, fwd);
-			    	}
-如果当前的chunk的前一个chunk为free状态（pre_inuse(p)==0)，则对前一个chunk进行unlink操作。
-
-    				if (nextchunk != av->top) {
-    	  				nextinuse = inuse_bit_at_offset(nextchunk, nextsize);
-						//标志下一个chunk是否处于free状态		    			
-						if (!nextinuse) {
-    						size += nextsize;
-    						unlink(av, nextchunk, bck, fwd);
-    	  				}
-如果下一个chunk（即nextchunk）也是free状态，将该chunk也从其所属的双向链表中拆下，进行合并。
- 
-						else
-    						clear_inuse_bit_at_offset(nextchunk, 0);
-							//由于free函数中，fastbin不合并的原因，因此标志fastbin chunk是否使用的pre_inuse一直为1，在这需对其进行清0，以表示新合并的chunk p处于free状态。
-	    				first_unsorted = unsorted_bin->fd;
-				    	unsorted_bin->fd = p;
-				    	first_unsorted->bk = p;
-    					if (!in_smallbin_range (size)) {
-    						p->fd_nextsize = NULL;
-    						p->bk_nextsize = NULL;
-    	  				}
-如果合并后的chunk size不在smallbin的范围内，则将新chunk的fd\_nextsize和bk\_nextsize字段清0。
-
-    					set_head(p, size | PREV_INUSE);
-						//设置chunk p的size字段，并标志chunk p的前一个chunk为使用状态
-			    	  	p->bk = unsorted_bin;
-			    	  	p->fd = first_unsorted;
-以下4条语句的功能就为把新合并的chunk p加入到unsortedbin中。  
-unsorted\_bin->fd = p  
-p->fd = first\_unsorted  
-first\_unsorted->bk = p  
-p->bk = unsorted\_bin
-
-			    	  	set_foot(p, size);
-然后设置下一个chunk的presize字段为当前chunk p的size。
-
-    				}
-    				else {
-		    	  		size += nextsize;
-		    	  		set_head(p, size | PREV_INUSE);
-		    	  		av->top = p;
-    				}
-如果新合并的chunk p的下一个chunk为top\_chunk，则将其整个合并到top\_chunk中。
-
-    			} while ( (p = nextp) != 0);
-循环对当前fastbin链表中的chunk进行同样的操作。    
-
-    		}
-      } while (fb++ != maxfb);
-	}
-循环对所有的fastbin链表进行同样的操作。
+      	/* When we are using atomic ops to free fast chunks we can get
+     	here for all block sizes.  */
+      	else if (atomic_load_relaxed (&av->have_fastchunks))
+    	{
+      		malloc_consolidate (av);
+      		/* restore original bin index */
+      		if (in_smallbin_range (nb))
+    			idx = smallbin_index (nb);
+      		else
+    			idx = largebin_index (nb);
+    	}
+否则调用系统sysmalloc进行分配。
+    
+      	/*
+     	Otherwise, relay to handle system-dependent cases
+       	*/
+      	else
+    	{
+      		void *p = sysmalloc (nb, av);
+      		if (p != NULL)
+    			alloc_perturb (p, bytes);
+      		return p;
+    	}
+    }
+  }
+    
+## 7.总结 ##
+至此，对于\_int\_malloc()函数的分析结束。对\_int\_malloc()函数的分配机制做一下总结：  
+1.
 
 
