@@ -26,7 +26,7 @@ BK->fd == chunk\_P?
 对应错误信息：  
 ![error2](https://raw.githubusercontent.com/fade-vivida/libc-linux-source-code-study/master/libc_study/picture/error2.PNG)
 ### 3）check 3 ###
-检查当前chunk的size是否在smallbin的范围内，在64-bit下samllbin的大小最大为512byte。如果chunk\_size>512，则该chunk属于largebin，判断其fd\_nextsize字段是否为NULL（其中fd\_nextsize和bk\_nextsize字段是largebin特有的）。
+检查当前chunk的size是否在smallbin的范围内，在64-bit下smallbin的大小最大为512byte。如果chunk\_size>512，则该chunk属于largebin，判断其fd\_nextsize字段是否为NULL（其中fd\_nextsize和bk\_nextsize字段是largebin特有的）。
 
     if (!in_smallbin_range (chunksize_nomask (P))			 \
     && __builtin_expect (P->fd_nextsize != NULL, 0)) {		  \
