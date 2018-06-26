@@ -162,7 +162,7 @@
 		#endif
       	) 
 如果符合以下2个条件，则考虑将该chunk加入fastbin链表。  
-条件1：释放chunk的size小于等于get\_max\_fast()宏定义值（64bit:0xa0,32bit:0x50)  
+条件1：释放chunk的size小于等于get\_max\_fast()宏定义值（64bit:0x80,32bit:0x40)  
 条件2：chunk p不是紧挨着top chunk（否则，将其合并到top chunk中）
 
 	{
