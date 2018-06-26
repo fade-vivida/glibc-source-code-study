@@ -26,7 +26,7 @@ BK->fd == chunk\_P?
 对应错误信息：  
 ![error2](https://raw.githubusercontent.com/fade-vivida/libc-linux-source-code-study/master/libc_study/picture/error2.PNG)
 ### 3）check 3 ###
-检查当前chunk的size是否在smallbin的范围内，在64-bit下smallbin的大小最大为512byte。如果chunk\_size>512，则该chunk属于largebin，判断其fd\_nextsize字段是否为NULL（其中fd\_nextsize和bk\_nextsize字段是largebin特有的）。
+检查当前chunk的size是否在smallbin的范围内，在64-bit下smallbin的大小最大为1008byte。如果chunk\_size>=1024，则该chunk属于largebin，判断其fd\_nextsize字段是否为NULL（其中fd\_nextsize和bk\_nextsize字段是largebin特有的）。
 
     if (!in_smallbin_range (chunksize_nomask (P))			 \
     && __builtin_expect (P->fd_nextsize != NULL, 0)) {		  \
@@ -240,9 +240,10 @@ MIN\_CHUNK\_SIZE定义为：
     	alloc_perturb (p, bytes);
       return p;
     }
-然后判断当前申请chunk size(nb)是否满足fastbin大小，其中get_max_fast()函数在32-bit下返回值为0x50，在64-bit为下返回值为0xa0。
+然后判断当前申请chunk size(nb)是否满足fastbin大小，其中get\_max\_fast()函数在32-bit下返回值为0x40，在64-bit为下返回值为0x80。  
+**注：该值有global\_max\_fast变量控制**
 
-    if ((unsigned long) (nb) <= (unsigned long) (get_max_fast ())) //get max_size of fastbin:80(0x50,32-bit),160byte(0xa0,64-bit)
+    if ((unsigned long) (nb) <= (unsigned long) (get_max_fast ())) //get max_size of fastbin:64(0x40,32-bit),128byte(0x80,64-bit)
 	{
 		idx = fastbin_index (nb);
 		mfastbinptr *fb = &fastbin (av, idx);
