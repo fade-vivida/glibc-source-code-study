@@ -36,29 +36,23 @@
 		if an inuse chunk borders them and debug is on, it's worth doing them.
 	   	*/
 	  	if (!prev_inuse (p))
-	    	{
+	    {
 			/* Note that we cannot even look at prev unless it is not inuse */
 	      		//如果前一块也是处于free状态，则必须对其也进行相应检查
 			mchunkptr prv = prev_chunk (p);
-<<<<<<< HEAD
 	      	assert (next_chunk (prv) == p);
 			//pre chunk的next chunk必须为当前chunk p，该检查在release版本失效
 	      	do_check_free_chunk (av, prv);
-=======
-	      		assert (next_chunk (prv) == p);
-			//pre chunk的next chunk必须为当前chunk p
-	      		do_check_free_chunk (av, prv);
->>>>>>> 91f8c1dc6b3f36ea33536ddbe5d19d82bfa3d143
 			//对prv进行free chunk的检查
-	    	}
+	    }
 		if (next == av->top)
-	    	{
+	    {
 			assert (prev_inuse (next));
 			assert (chunksize (next) >= MINSIZE);
 			//如果next chunk为top chunk，其prev_inuse字段必须设置为1，且其size大小必须大于MINSIZE	      		    
 		}
 	  	else if (!inuse (next))
-	    		do_check_free_chunk (av, next);
+	    	do_check_free_chunk (av, next);
 			//如果后一块也是处于free状态，则对其也进行free chunk检查
 	}
 
@@ -83,7 +77,7 @@
 		
 		/* Unless a special marker, must have OK fields */
 	  	if ((unsigned long) (sz) >= MINSIZE)
-	    	{
+	    {
 			assert ((sz & MALLOC_ALIGN_MASK) == 0);
 			//sz大小对齐检查
 	      	
@@ -91,22 +85,22 @@
 			//用户输入数据起始地址对齐检查（本质与chunk p起始地址对齐检查一致）
 	      	
 			/* ... matching footer field */
-	      		assert (prev_size (next_chunk (p)) == sz);
+	      	assert (prev_size (next_chunk (p)) == sz);
 			//next chunk的pre size必须等于当前块的size
 	      	
 			/* ... and is fully consolidated */
-	      		assert (prev_inuse (p));
+	      	assert (prev_inuse (p));
 			//chunk p的prev_inuse字段必须为1，即不允许出现两个相邻且处于free状态的块（未合并）
-	      		assert (next == av->top || inuse (next));
+	      	assert (next == av->top || inuse (next));
 			//next chunk要么是top chunk，要不是处于inuse状态的chunk，检查本质也是不允许出现两个相邻且处于free状态的块
 			
 			/* ... and has minimally sane links */
-	      		assert (p->fd->bk == p);
-	      		assert (p->bk->fd == p);
+	      	assert (p->fd->bk == p);
+	      	assert (p->bk->fd == p);
 			//双向链表指针检查
-	    	}
+	    }
 	  	else /* markers are always of size SIZE_SZ */
-	    		assert (sz == SIZE_SZ);
+	    	assert (sz == SIZE_SZ);
 	}
 
 #### 1.3.3 do\_check\_chunk()函数 ####
@@ -120,43 +114,43 @@
 	  	char *max_address = (char *) (av->top) + chunksize (av->top);
 	  	char *min_address = max_address - av->system_mem;
 		if (!chunk_is_mmapped (p))
-	    	{
+	    {
 			//chunk p是通过brk分配得到，而不是MMAP分配得到
 			/* Has legal address ... */
-	      		if (p != av->top)
-	       		{
+	      	if (p != av->top)
+	       	{
 				//如果p不是top chunk
 				if (contiguous (av))
-	            		{
+	            {
 					//表示chunk所在的arena是main_arena，地址连续，则其地址应大于最小地址，小于top chunk地址
 					assert (((char *) p) >= min_address);
-	              			assert (((char *) p + sz) <= ((char *) (av->top)));
-	            		}
-	        	}
-	      		else
-	        	{
+	              	assert (((char *) p + sz) <= ((char *) (av->top)));
+	            }
+	        }
+	      	else
+	        {
 				//如果p是top chunk，则其大小要大于MINSIZE，且其prev_inuse字段置1
 				/* top size is always at least MINSIZE */
-	          		assert ((unsigned long) (sz) >= MINSIZE);
-	          		/* top predecessor always marked inuse */
-	          		assert (prev_inuse (p));
-	        	}
-	    	}
+	          	assert ((unsigned long) (sz) >= MINSIZE);
+	          	/* top predecessor always marked inuse */
+	          	assert (prev_inuse (p));
+	        }
+	    }
 	  	else if (!DUMPED_MAIN_ARENA_CHUNK (p))
-	    	{
+	    {
 			//如果该chunk是通过MMAP分配得到的，且其不在一个固定范围内（方便调试的地址？）
 			/* address is outside main heap  */
-	      		if (contiguous (av) && av->top != initial_top (av))
-	        	{
+	      	if (contiguous (av) && av->top != initial_top (av))
+	        {
 				//如果当前arena top chunk字段与初始top chunk不同（即MMAP了一块新内存）
 				assert (((char *) p) < min_address || ((char *) p) >= max_address);
-	        	}
-	      		/* chunk is page-aligned */
-	      		assert (((prev_size (p) + sz) & (GLRO (dl_pagesize) - 1)) == 0);
+	        }
+	      	/* chunk is page-aligned */
+	      	assert (((prev_size (p) + sz) & (GLRO (dl_pagesize) - 1)) == 0);
 			//页对齐
-	      		/* mem is aligned */
-	      		assert (aligned_OK (chunk2mem (p)));
-	    	}
+	      	/* mem is aligned */
+	      	assert (aligned_OK (chunk2mem (p)));
+	    }
 	}
 
 
@@ -167,10 +161,10 @@
 	//如果符合下列条件则将chunk放在fastbin上，以便加快释放与分配
 	if ((unsigned long)(size) <= (unsigned long)(get_max_fast ())
 		#if TRIM_FASTBINS
-    		/* If TRIM_FASTBINS set, don't place chunks bordering top into fastbins */
-      		&& (chunk_at_offset(p, size) != av->top)
+    	/* If TRIM_FASTBINS set, don't place chunks bordering top into fastbins */
+      	&& (chunk_at_offset(p, size) != av->top)
 		#endif
-      	) 
+      ) 
 如果符合以下2个条件，则考虑将该chunk加入fastbin链表。  
 条件1：释放chunk的size小于等于get\_max\_fast()宏定义值（64bit:0x80,32bit:0x40)  
 条件2：chunk p不是紧挨着top chunk（否则，将其合并到top chunk中）
@@ -178,7 +172,7 @@
 	{
 		if (__builtin_expect (chunksize_nomask (chunk_at_offset (p, size)) <= 2 * SIZE_SZ, 0)
 			|| __builtin_expect (chunksize (chunk_at_offset (p, size)) >= av->system_mem, 0))
-      		{
+      	{
 			bool fail = true;
 			/* We might not have a lock at this point and concurrent modifications
 	   		of system_mem might result in a false positive.  Redo the test after
@@ -202,40 +196,40 @@
 		atomic_store_relaxed (&av->have_fastchunks, true);
 		//将arena的have_fastchunks字段值1，表示当前fastbin链表中有空闲chunk
 
-    		unsigned int idx = fastbin_index(size);
-    		fb = &fastbin (av, idx);
+    	unsigned int idx = fastbin_index(size);
+    	fb = &fastbin (av, idx);
 
-    		/* Atomically link P to its fastbin: P->FD = *FB; *FB = P;  */
-    		mchunkptr old = *fb, old2;
+    	/* Atomically link P to its fastbin: P->FD = *FB; *FB = P;  */
+    	mchunkptr old = *fb, old2;
 		if (SINGLE_THREAD_P)
-      		{
+      	{
 			/* Check that the top of the bin is not the record we are going to
 	   		add (i.e., double free).  */
 			if (__builtin_expect (old == p, 0))
 	  			malloc_printerr ("double free or corruption (fasttop)");
 			p->fd = old;
 			*fb = p;
-      		}
+      	}
 这里有一个重要检查：当前要加入的chunk是否为fastbin中已经记录的top chunk。  
 **因此，针对这条检查规则，产生了一个重要的绕过方法（即在double free时，针对需要double free的chunk A，可以采用free(A),free(B),free(A)的方式进行绕过）。**  
 
     	else
       		do
-		{
-	  		/* Check that the top of the bin is not the record we are going to
+			{
+	  			/* Check that the top of the bin is not the record we are going to
 	     		add (i.e., double free).  */
-	  		if (__builtin_expect (old == p, 0))
+	  			if (__builtin_expect (old == p, 0))
 	    			malloc_printerr ("double free or corruption (fasttop)");
 	  			p->fd = old2 = old;
-		}
+			}
       		while ((old = catomic_compare_and_exchange_val_rel (fb, p, old2)) != old2);
-		/* Check that size of fastbin chunk at the top is the same as
-       	size of the chunk that we are adding.  We can dereference OLD
-       	only if we have the lock, otherwise it might have already been
-       	allocated again.  */
-    	if (have_lock && old != NULL && __builtin_expect (fastbin_index (chunksize (old)) != idx, 0))
-      		malloc_printerr ("invalid fastbin entry (free)");
-}
+			/* Check that size of fastbin chunk at the top is the same as
+       		size of the chunk that we are adding.  We can dereference OLD
+       		only if we have the lock, otherwise it might have already been
+       		allocated again.  */
+    		if (have_lock && old != NULL && __builtin_expect (fastbin_index (chunksize (old)) != idx, 0))
+      			malloc_printerr ("invalid fastbin entry (free)");
+	}
 多线程的加入操作，然后检查顶部fastbin chunk的大小是否与我们添加的chunk的大小相同。
 
 ## 3. 放入unsortedbin链表 ##
@@ -245,57 +239,56 @@
 	else if (!chunk_is_mmapped(p)) 
 	{
 		/* If we're single-threaded, don't lock the arena.  */
-    		if (SINGLE_THREAD_P)
-      			have_lock = true;
+    	if (SINGLE_THREAD_P)
+      		have_lock = true;
 		if (!have_lock)
-      			__libc_lock_lock (av->mutex);
+      		__libc_lock_lock (av->mutex);
 		nextchunk = chunk_at_offset(p, size);
-		/* Lightweight tests: check whether the block is already the
-       		top block.  */
-    		if (__glibc_unlikely (p == av->top))
-      			malloc_printerr ("double free or corruption (top)");
-    		/* Or whether the next chunk is beyond the boundaries of the arena.  */
-    		if (__builtin_expect (contiguous (av) && (char *) nextchunk 
+		/* Lightweight tests: check whether the block is already the top block.  */
+		if (__glibc_unlikely (p == av->top))
+			malloc_printerr ("double free or corruption (top)");
+		/* Or whether the next chunk is beyond the boundaries of the arena.  */
+		if (__builtin_expect (contiguous (av) && (char *) nextchunk 
 			>= ((char *) av->top + chunksize(av->top)), 0))
 			malloc_printerr ("double free or corruption (out)");
-    		/* Or whether the block is actually not marked used.  */
-    		if (__glibc_unlikely (!prev_inuse(nextchunk)))
-      			malloc_printerr ("double free or corruption (!prev)");
+		/* Or whether the block is actually not marked used.  */
+		if (__glibc_unlikely (!prev_inuse(nextchunk)))
+			malloc_printerr ("double free or corruption (!prev)");
 再次进行一些轻量级的测试，主要测试内容有以下3个方面：  
 test 1：当前释放的chunk p是否为top chunk  
 test 2：next chunk是否超出了arena范围  
 test 3：再次检查当前chunk是否为inuse
 
 		nextsize = chunksize(nextchunk);
-    		if (__builtin_expect (chunksize_nomask (nextchunk) <= 2 * SIZE_SZ, 0)
+    	if (__builtin_expect (chunksize_nomask (nextchunk) <= 2 * SIZE_SZ, 0)
 			|| __builtin_expect (nextsize >= av->system_mem, 0))
-      			malloc_printerr ("free(): invalid next size (normal)");
+      		malloc_printerr ("free(): invalid next size (normal)");
 next chunk的size字段必须大于2*SIZE\_SZ且小于av->system\_mem（av->sytem\_mem就是heap段的大小）
 
 		free_perturb (chunk2mem(p), size - 2 * SIZE_SZ);
 		//进行字段填充
 
 		/* consolidate backward */
-    		if (!prev_inuse(p)) 
+    	if (!prev_inuse(p)) 
 		{
-      			prevsize = prev_size (p);
-      			size += prevsize;
-      			p = chunk_at_offset(p, -((long) prevsize));
-      			unlink(av, p, bck, fwd);
+  			prevsize = prev_size (p);
+  			size += prevsize;
+  			p = chunk_at_offset(p, -((long) prevsize));
+  			unlink(av, p, bck, fwd);
 		}
 如果pre chunk处于free状态，则前向合并（unlink操作）。
 
 		if (nextchunk != av->top) 
 		{
 			/* get and clear inuse bit */
-      			nextinuse = inuse_bit_at_offset(nextchunk, nextsize);
+      		nextinuse = inuse_bit_at_offset(nextchunk, nextsize);
 			
 			/* consolidate forward */
-      			if (!nextinuse) 
+      		if (!nextinuse) 
 			{
 				unlink(av, nextchunk, bck, fwd);
 				size += nextsize;
-      			} 
+      		} 
 			else
 				clear_inuse_bit_at_offset(nextchunk, 0);
 如果next chunk不为top chunk且处于free状态，则后向合并。否则修改next chunk的preinuse字段为0，标志当前chunk已被释放。
@@ -304,34 +297,34 @@ next chunk的size字段必须大于2*SIZE\_SZ且小于av->system\_mem（av->syte
 			Place the chunk in unsorted chunk list. Chunks are
 			not placed into regular bins until after they have
 			been given one chance to be used in malloc.
-      			*/
+      		*/
 			bck = unsorted_chunks(av);
-      			fwd = bck->fd;
-      			if (__glibc_unlikely (fwd->bk != bck))
+      		fwd = bck->fd;
+      		if (__glibc_unlikely (fwd->bk != bck))
 				malloc_printerr ("free(): corrupted unsorted chunks");
-      			p->fd = fwd;
-      			p->bk = bck;
-      			if (!in_smallbin_range(size))
+      		p->fd = fwd;
+      		p->bk = bck;
+      		if (!in_smallbin_range(size))
 			{
 	  			p->fd_nextsize = NULL;
 	  			p->bk_nextsize = NULL;
 				//largebin chunk有相应的fd_nextsize和bk_nextsize字段，需要将其清0
 			}
-      			bck->fd = p;
-      			fwd->bk = p;
+      		bck->fd = p;
+      		fwd->bk = p;
 		
 			set_head(p, size | PREV_INUSE);
 			//设置chunk p的PREV_INUSE字段为1
-      			set_foot(p, size);
+      		set_foot(p, size);
 			//设置next chunk的presize字段为当前chunk p的size
-      			check_free_chunk(av, p);
+      		check_free_chunk(av, p);
 		}
 然后将chunk p加入unsortedbin链表中，并修改当前unsortedbin链表指针及chunk p相应链表指针，设置chunk p相应字段值，然后调用check\_free\_chunk()对chunk p进行检查。
 
     	/*If the chunk borders the current high end of memory,consolidate into top*/
     	else 
-	{
-		size += nextsize;
+		{
+			size += nextsize;
       		set_head(p, size | PREV_INUSE);
       		av->top = p;
       		check_chunk(av, p);
@@ -339,40 +332,40 @@ next chunk的size字段必须大于2*SIZE\_SZ且小于av->system\_mem（av->syte
 如果next chunk为top chunk，则将其合并到top chunk中。
 
     	/*
-	If freeing a large space, consolidate possibly-surrounding
-	chunks. Then, if the total unused topmost memory exceeds trim
-	threshold, ask malloc_trim to reduce top.
-
-	Unless max_fast is 0, we don't know if there are fastbins
-	bordering top, so we cannot tell for sure whether threshold
-	has been reached unless fastbins are consolidated.  But we
-	don't want to consolidate on each free.  As a compromise,
-	consolidation is performed if FASTBIN_CONSOLIDATION_THRESHOLD
-	is reached.
-	*/
+		If freeing a large space, consolidate possibly-surrounding
+		chunks. Then, if the total unused topmost memory exceeds trim
+		threshold, ask malloc_trim to reduce top.
+		
+		Unless max_fast is 0, we don't know if there are fastbins
+		bordering top, so we cannot tell for sure whether threshold
+		has been reached unless fastbins are consolidated.  But we
+		don't want to consolidate on each free.  As a compromise,
+		consolidation is performed if FASTBIN_CONSOLIDATION_THRESHOLD
+		is reached.
+		*/
 	
-	if ((unsigned long)(size) >= FASTBIN_CONSOLIDATION_THRESHOLD) 
-	{
-		if (atomic_load_relaxed (&av->have_fastchunks))
-			malloc_consolidate(av);
-		if (av == &main_arena) 
+		if ((unsigned long)(size) >= FASTBIN_CONSOLIDATION_THRESHOLD) 
 		{
-			#ifndef MORECORE_CANNOT_TRIM
-			if ((unsigned long)(chunksize(av->top)) >= (unsigned long)(mp_.trim_threshold))
-				systrim(mp_.top_pad, av);
-			#endif
+			if (atomic_load_relaxed (&av->have_fastchunks))
+				malloc_consolidate(av);
+			if (av == &main_arena) 
+			{
+				#ifndef MORECORE_CANNOT_TRIM
+				if ((unsigned long)(chunksize(av->top)) >= (unsigned long)(mp_.trim_threshold))
+					systrim(mp_.top_pad, av);
+				#endif
 	      	} 
-		else 
-		{
-			/* Always try heap_trim(), even if the top chunk is not
-			large, because the corresponding heap might go away.  */
-			heap_info *heap = heap_for_ptr(top(av));
+			else 
+			{
+				/* Always try heap_trim(), even if the top chunk is not
+				large, because the corresponding heap might go away.  */
+				heap_info *heap = heap_for_ptr(top(av));
 
-			assert(heap->ar_ptr == av);
-			heap_trim(heap, mp_.top_pad);
+				assert(heap->ar_ptr == av);
+				heap_trim(heap, mp_.top_pad);
 	      	}
-	}
-	if (!have_lock)
+		}
+		if (!have_lock)
 	      __libc_lock_unlock (av->mutex);
 	}
 	/*If the chunk was allocated via mmap, release via munmap().*/
@@ -382,7 +375,7 @@ next chunk的size字段必须大于2*SIZE\_SZ且小于av->system\_mem（av->syte
 很简单，调用munmap\_chunk即可。
 
 	else {
-    		munmap_chunk (p);
+    	munmap_chunk (p);
 	}
 其中munmap\_chunk的定义如下所示：
 
@@ -392,9 +385,9 @@ next chunk的size字段必须大于2*SIZE\_SZ且小于av->system\_mem（av->syte
 		assert (chunk_is_mmapped (p));
 		
 		/* Do nothing if the chunk is a faked mmapped chunk in the dumped
-	   	 main arena.  We never free this memory.  */
+	   	main arena.  We never free this memory.  */
 	  	if (DUMPED_MAIN_ARENA_CHUNK (p))
-	    		return;
+	    	return;
 到底什么是DUMPED\_MAIN\_ARENA\_CHUNK?
 
 		uintptr_t block = (uintptr_t) p - prev_size (p);
