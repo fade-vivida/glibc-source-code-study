@@ -1,0 +1,725 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>free_study</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+<style type="text/css">
+/* GitHub stylesheet for MarkdownPad (http://markdownpad.com) */
+/* Author: Nicolas Hery - http://nicolashery.com */
+/* Version: b13fe65ca28d2e568c6ed5d7f06581183df8f2ff */
+/* Source: https://github.com/nicolahery/markdownpad-github */
+
+/* RESET
+=============================================================================*/
+
+html, body, div, span, applet, object, iframe, h1, h2, h3, h4, h5, h6, p, blockquote, pre, a, abbr, acronym, address, big, cite, code, del, dfn, em, img, ins, kbd, q, s, samp, small, strike, strong, sub, sup, tt, var, b, u, i, center, dl, dt, dd, ol, ul, li, fieldset, form, label, legend, table, caption, tbody, tfoot, thead, tr, th, td, article, aside, canvas, details, embed, figure, figcaption, footer, header, hgroup, menu, nav, output, ruby, section, summary, time, mark, audio, video {
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+/* BODY
+=============================================================================*/
+
+body {
+  font-family: Helvetica, arial, freesans, clean, sans-serif;
+  font-size: 14px;
+  line-height: 1.6;
+  color: #333;
+  background-color: #fff;
+  padding: 20px;
+  max-width: 960px;
+  margin: 0 auto;
+}
+
+body>*:first-child {
+  margin-top: 0 !important;
+}
+
+body>*:last-child {
+  margin-bottom: 0 !important;
+}
+
+/* BLOCKS
+=============================================================================*/
+
+p, blockquote, ul, ol, dl, table, pre {
+  margin: 15px 0;
+}
+
+/* HEADERS
+=============================================================================*/
+
+h1, h2, h3, h4, h5, h6 {
+  margin: 20px 0 10px;
+  padding: 0;
+  font-weight: bold;
+  -webkit-font-smoothing: antialiased;
+}
+
+h1 tt, h1 code, h2 tt, h2 code, h3 tt, h3 code, h4 tt, h4 code, h5 tt, h5 code, h6 tt, h6 code {
+  font-size: inherit;
+}
+
+h1 {
+  font-size: 28px;
+  color: #000;
+}
+
+h2 {
+  font-size: 24px;
+  border-bottom: 1px solid #ccc;
+  color: #000;
+}
+
+h3 {
+  font-size: 18px;
+}
+
+h4 {
+  font-size: 16px;
+}
+
+h5 {
+  font-size: 14px;
+}
+
+h6 {
+  color: #777;
+  font-size: 14px;
+}
+
+body>h2:first-child, body>h1:first-child, body>h1:first-child+h2, body>h3:first-child, body>h4:first-child, body>h5:first-child, body>h6:first-child {
+  margin-top: 0;
+  padding-top: 0;
+}
+
+a:first-child h1, a:first-child h2, a:first-child h3, a:first-child h4, a:first-child h5, a:first-child h6 {
+  margin-top: 0;
+  padding-top: 0;
+}
+
+h1+p, h2+p, h3+p, h4+p, h5+p, h6+p {
+  margin-top: 10px;
+}
+
+/* LINKS
+=============================================================================*/
+
+a {
+  color: #4183C4;
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+/* LISTS
+=============================================================================*/
+
+ul, ol {
+  padding-left: 30px;
+}
+
+ul li > :first-child, 
+ol li > :first-child, 
+ul li ul:first-of-type, 
+ol li ol:first-of-type, 
+ul li ol:first-of-type, 
+ol li ul:first-of-type {
+  margin-top: 0px;
+}
+
+ul ul, ul ol, ol ol, ol ul {
+  margin-bottom: 0;
+}
+
+dl {
+  padding: 0;
+}
+
+dl dt {
+  font-size: 14px;
+  font-weight: bold;
+  font-style: italic;
+  padding: 0;
+  margin: 15px 0 5px;
+}
+
+dl dt:first-child {
+  padding: 0;
+}
+
+dl dt>:first-child {
+  margin-top: 0px;
+}
+
+dl dt>:last-child {
+  margin-bottom: 0px;
+}
+
+dl dd {
+  margin: 0 0 15px;
+  padding: 0 15px;
+}
+
+dl dd>:first-child {
+  margin-top: 0px;
+}
+
+dl dd>:last-child {
+  margin-bottom: 0px;
+}
+
+/* CODE
+=============================================================================*/
+
+pre, code, tt {
+  font-size: 12px;
+  font-family: Consolas, "Liberation Mono", Courier, monospace;
+}
+
+code, tt {
+  margin: 0 0px;
+  padding: 0px 0px;
+  white-space: nowrap;
+  border: 1px solid #eaeaea;
+  background-color: #f8f8f8;
+  border-radius: 3px;
+}
+
+pre>code {
+  margin: 0;
+  padding: 0;
+  white-space: pre;
+  border: none;
+  background: transparent;
+}
+
+pre {
+  background-color: #f8f8f8;
+  border: 1px solid #ccc;
+  font-size: 13px;
+  line-height: 19px;
+  overflow: auto;
+  padding: 6px 10px;
+  border-radius: 3px;
+}
+
+pre code, pre tt {
+  background-color: transparent;
+  border: none;
+}
+
+kbd {
+    -moz-border-bottom-colors: none;
+    -moz-border-left-colors: none;
+    -moz-border-right-colors: none;
+    -moz-border-top-colors: none;
+    background-color: #DDDDDD;
+    background-image: linear-gradient(#F1F1F1, #DDDDDD);
+    background-repeat: repeat-x;
+    border-color: #DDDDDD #CCCCCC #CCCCCC #DDDDDD;
+    border-image: none;
+    border-radius: 2px 2px 2px 2px;
+    border-style: solid;
+    border-width: 1px;
+    font-family: "Helvetica Neue",Helvetica,Arial,sans-serif;
+    line-height: 10px;
+    padding: 1px 4px;
+}
+
+/* QUOTES
+=============================================================================*/
+
+blockquote {
+  border-left: 4px solid #DDD;
+  padding: 0 15px;
+  color: #777;
+}
+
+blockquote>:first-child {
+  margin-top: 0px;
+}
+
+blockquote>:last-child {
+  margin-bottom: 0px;
+}
+
+/* HORIZONTAL RULES
+=============================================================================*/
+
+hr {
+  clear: both;
+  margin: 15px 0;
+  height: 0px;
+  overflow: hidden;
+  border: none;
+  background: transparent;
+  border-bottom: 4px solid #ddd;
+  padding: 0;
+}
+
+/* TABLES
+=============================================================================*/
+
+table th {
+  font-weight: bold;
+}
+
+table th, table td {
+  border: 1px solid #ccc;
+  padding: 6px 13px;
+}
+
+table tr {
+  border-top: 1px solid #ccc;
+  background-color: #fff;
+}
+
+table tr:nth-child(2n) {
+  background-color: #f8f8f8;
+}
+
+/* IMAGES
+=============================================================================*/
+
+img {
+  max-width: 100%
+}
+</style>
+<script type="text/javascript" src="directory.js"></script>
+</head>
+<body>
+<h1>glibc源码学习</h1>
+<h1>malloc.c</h1>
+<h1>_int_free()函数</h1>
+<p>_int_free()函数的参数如下所示：</p>
+<pre><code>_int_free (mstate av, mchunkptr p, int have_lock)
+</code></pre>
+
+<p>其中av表示当前释放chunk所在的arena，p为当前要释放的chunk，have_lock为一个锁变量。</p>
+<h2>1. free check</h2>
+<p>在对chunk进行真正的free操作前，首先会进行一系列检查操作。</p>
+<h3>1.1 free_check1</h3>
+<p><img src="https://raw.githubusercontent.com/fade-vivida/libc-linux-source-code-study/master/libc_study/picture/free_check1.PNG" alt="free_check1" /><br />
+首先检查当前chunk p的地址是否在一个合法字段（由于比较是一个无符号数比较，因此-size会是一个非常大的值），然后看当前chunk p的地址是否对齐（64bit下为16字节对齐，32bit下为8字节对齐）。</p>
+<h3>1.2 free_check2</h3>
+<p><img src="https://raw.githubusercontent.com/fade-vivida/libc-linux-source-code-study/master/libc_study/picture/free_check2.PNG" alt="free_check2" /><br />
+对要释放chunk p的size进行检查。首先该chunk的size必须大于最小值（64bit：0x20,32bit：0x10），其次其大小必须也要对齐（与地址对齐方式一致）。</p>
+<h3>1.3 free_check3</h3>
+<p>调用check_inuse_chunk(av,p)函数进行检查。  </p>
+<h4>1.3.1 do_check_inuse_check()函数</h4>
+<p>其中check_inuse_chunk()函数将调用do_check_inuse_chunk()函数，该函数具体定义及相关解释如下所示：<br />
+<strong>注：一个十分有趣且重要的事情，在实际运行程序时可以发现对于大多数程序而言assert断言的判断好像并未实现，后经过查询资料发现assert语句只有在定义了DEBUG宏（也就是调试版本中）才会执行，在发行版本中（release版）assert语句没有实际意义。</strong></p>
+<pre><code>static void do_check_inuse_chunk (mstate av, mchunkptr p)
+{
+    mchunkptr next;
+    do_check_chunk (av, p);
+    //调用do_check_chunk函数对chunk p进行检查
+    if (chunk_is_mmapped (p))
+        return; /* mmapped chunks have no next/prev */
+    //检查chunk p的IS_MMAPPED字段是否设置，如果已经设置，则直接返回。
+    /* Check whether it claims to be in use ... */
+    assert (inuse (p));
+    //检查p的是否处于inuse状态，检查方式为：看next chunk的pre_inuse字段是否为1
+    next = next_chunk (p);
+    /* ... and is surrounded by OK chunks.
+    Since more things can be checked with free chunks than inuse ones,
+    if an inuse chunk borders them and debug is on, it's worth doing them.
+    */
+    if (!prev_inuse (p))
+    {
+        /* Note that we cannot even look at prev unless it is not inuse */
+            //如果前一块也是处于free状态，则必须对其也进行相应检查
+        mchunkptr prv = prev_chunk (p);
+        assert (next_chunk (prv) == p);
+        //pre chunk的next chunk必须为当前chunk p，该检查在release版本失效
+        do_check_free_chunk (av, prv);
+        //对prv进行free chunk的检查
+    }
+    if (next == av-&gt;top)
+    {
+        assert (prev_inuse (next));
+        assert (chunksize (next) &gt;= MINSIZE);
+        //如果next chunk为top chunk，其prev_inuse字段必须设置为1，且其size大小必须大于MINSIZE                    
+    }
+    else if (!inuse (next))
+        do_check_free_chunk (av, next);
+        //如果后一块也是处于free状态，则对其也进行free chunk检查
+}
+</code></pre>
+
+<h4>1.3.2 do_check_free_chunk()函数</h4>
+<p><strong>注：其中的所有assert检查在release版本失效。</strong></p>
+<pre><code>static void do_check_free_chunk (mstate av, mchunkptr p)
+{
+    INTERNAL_SIZE_T sz = chunksize_nomask (p) &amp; ~(PREV_INUSE | NON_MAIN_ARENA);
+    //这里的sz是去除标志位PREV_INUSE和NON_MAIN_ARENA，但没有去除IS_MMAPPED
+    mchunkptr next = chunk_at_offset (p, sz);
+
+    do_check_chunk (av, p);
+    //检查chunk p的合法性
+
+    /* Chunk must claim to be free ... */
+    assert (!inuse (p));    
+    //chunk p必须是free状态
+
+    assert (!chunk_is_mmapped (p));
+    //chunk p不是通过MMAP得到的
+
+    /* Unless a special marker, must have OK fields */
+    if ((unsigned long) (sz) &gt;= MINSIZE)
+    {
+        assert ((sz &amp; MALLOC_ALIGN_MASK) == 0);
+        //sz大小对齐检查
+
+        assert (aligned_OK (chunk2mem (p)));
+        //用户输入数据起始地址对齐检查（本质与chunk p起始地址对齐检查一致）
+
+        /* ... matching footer field */
+        assert (prev_size (next_chunk (p)) == sz);
+        //next chunk的pre size必须等于当前块的size
+
+        /* ... and is fully consolidated */
+        assert (prev_inuse (p));
+        //chunk p的prev_inuse字段必须为1，即不允许出现两个相邻且处于free状态的块（未合并）
+        assert (next == av-&gt;top || inuse (next));
+        //next chunk要么是top chunk，要不是处于inuse状态的chunk，检查本质也是不允许出现两个相邻且处于free状态的块
+
+        /* ... and has minimally sane links */
+        assert (p-&gt;fd-&gt;bk == p);
+        assert (p-&gt;bk-&gt;fd == p);
+        //双向链表指针检查
+    }
+    else /* markers are always of size SIZE_SZ */
+        assert (sz == SIZE_SZ);
+}
+</code></pre>
+
+<h4>1.3.3 do_check_chunk()函数</h4>
+<p><strong>注：这里有一点需要注意，就是关于contiguous宏，由于main_arena是采用brk分配，因此通过main_arena得到的chunk地址均为连续分配。而MMAP则是通过映射一块大内存，然后模仿brk的分配方式进行分配，理论上分配到的chunk地址是不连续的。</strong><br />
+<strong>注：其中所有的assert检查在release版本失效。</strong></p>
+<pre><code>static void do_check_chunk (mstate av, mchunkptr p)
+{
+    unsigned long sz = chunksize (p);
+    /* min and max possible addresses assuming contiguous allocation */
+    char *max_address = (char *) (av-&gt;top) + chunksize (av-&gt;top);
+    char *min_address = max_address - av-&gt;system_mem;
+    if (!chunk_is_mmapped (p))
+    {
+        //chunk p是通过brk分配得到，而不是MMAP分配得到
+        /* Has legal address ... */
+        if (p != av-&gt;top)
+        {
+            //如果p不是top chunk
+            if (contiguous (av))
+            {
+                //表示chunk所在的arena是main_arena，地址连续，则其地址应大于最小地址，小于top chunk地址
+                assert (((char *) p) &gt;= min_address);
+                assert (((char *) p + sz) &lt;= ((char *) (av-&gt;top)));
+            }
+        }
+        else
+        {
+            //如果p是top chunk，则其大小要大于MINSIZE，且其prev_inuse字段置1
+            /* top size is always at least MINSIZE */
+            assert ((unsigned long) (sz) &gt;= MINSIZE);
+            /* top predecessor always marked inuse */
+            assert (prev_inuse (p));
+        }
+    }
+    else if (!DUMPED_MAIN_ARENA_CHUNK (p))
+    {
+        //如果该chunk是通过MMAP分配得到的，且其不在一个固定范围内（方便调试的地址？）
+        /* address is outside main heap  */
+        if (contiguous (av) &amp;&amp; av-&gt;top != initial_top (av))
+        {
+            //如果当前arena top chunk字段与初始top chunk不同（即MMAP了一块新内存）
+            assert (((char *) p) &lt; min_address || ((char *) p) &gt;= max_address);
+        }
+        /* chunk is page-aligned */
+        assert (((prev_size (p) + sz) &amp; (GLRO (dl_pagesize) - 1)) == 0);
+        //页对齐
+        /* mem is aligned */
+        assert (aligned_OK (chunk2mem (p)));
+    }
+}
+</code></pre>
+
+<h2>2. 放入fastbin链表</h2>
+<pre><code>/*
+If eligible, place chunk on a fastbin so it can be found
+and used quickly in malloc. */
+//如果符合下列条件则将chunk放在fastbin上，以便加快释放与分配
+if ((unsigned long)(size) &lt;= (unsigned long)(get_max_fast ())
+    #if TRIM_FASTBINS
+    /* If TRIM_FASTBINS set, don't place chunks bordering top into fastbins */
+    &amp;&amp; (chunk_at_offset(p, size) != av-&gt;top)
+    #endif
+  ) 
+</code></pre>
+
+<p>如果符合以下2个条件，则考虑将该chunk加入fastbin链表。<br />
+条件1：释放chunk的size小于等于get_max_fast()宏定义值（64bit:0x80,32bit:0x40)<br />
+条件2：chunk p不是紧挨着top chunk（否则，将其合并到top chunk中）</p>
+<pre><code>{
+    if (__builtin_expect (chunksize_nomask (chunk_at_offset (p, size)) &lt;= 2 * SIZE_SZ, 0)
+        || __builtin_expect (chunksize (chunk_at_offset (p, size)) &gt;= av-&gt;system_mem, 0))
+    {
+        bool fail = true;
+        /* We might not have a lock at this point and concurrent modifications
+        of system_mem might result in a false positive.  Redo the test after
+        getting the lock.  */
+        if (!have_lock)
+        {
+                __libc_lock_lock (av-&gt;mutex);
+                fail = (chunksize_nomask (chunk_at_offset (p, size)) &lt;= 2 * SIZE_SZ
+                || chunksize (chunk_at_offset (p, size)) &gt;= av-&gt;system_mem);
+                __libc_lock_unlock (av-&gt;mutex);
+        }
+        if (fail)
+            malloc_printerr (&quot;free(): invalid next size (fast)&quot;);
+            //next chunk size必须大于2*SIZE_SZ且小于av-&gt;system_mem
+</code></pre>
+
+<p>以上操作为检查next chunk的size字段是否符合要求（大于2*SIZE_SZ，且小于av-&gt;system_mem)。</p>
+<pre><code>        }
+    free_perturb (chunk2mem(p), size - 2 * SIZE_SZ);
+    //如果定义了填充字节，则在free时将其填充
+
+    atomic_store_relaxed (&amp;av-&gt;have_fastchunks, true);
+    //将arena的have_fastchunks字段值1，表示当前fastbin链表中有空闲chunk
+
+    unsigned int idx = fastbin_index(size);
+    fb = &amp;fastbin (av, idx);
+
+    /* Atomically link P to its fastbin: P-&gt;FD = *FB; *FB = P;  */
+    mchunkptr old = *fb, old2;
+    if (SINGLE_THREAD_P)
+    {
+        /* Check that the top of the bin is not the record we are going to
+        add (i.e., double free).  */
+        if (__builtin_expect (old == p, 0))
+            malloc_printerr (&quot;double free or corruption (fasttop)&quot;);
+        p-&gt;fd = old;
+        *fb = p;
+    }
+</code></pre>
+
+<p>这里有一个重要检查：当前要加入的chunk是否为fastbin中已经记录的top chunk。<br />
+<strong>因此，针对这条检查规则，产生了一个重要的绕过方法（即在double free时，针对需要double free的chunk A，可以采用free(A),free(B),free(A)的方式进行绕过）。</strong>  </p>
+<pre><code>    else
+        do
+        {
+            /* Check that the top of the bin is not the record we are going to
+            add (i.e., double free).  */
+            if (__builtin_expect (old == p, 0))
+                malloc_printerr (&quot;double free or corruption (fasttop)&quot;);
+            p-&gt;fd = old2 = old;
+        }
+        while ((old = catomic_compare_and_exchange_val_rel (fb, p, old2)) != old2);
+        /* Check that size of fastbin chunk at the top is the same as
+        size of the chunk that we are adding.  We can dereference OLD
+        only if we have the lock, otherwise it might have already been
+        allocated again.  */
+        if (have_lock &amp;&amp; old != NULL &amp;&amp; __builtin_expect (fastbin_index (chunksize (old)) != idx, 0))
+            malloc_printerr (&quot;invalid fastbin entry (free)&quot;);
+}
+</code></pre>
+
+<p>多线程的加入操作，然后检查顶部fastbin chunk的大小是否与我们添加的chunk的大小相同。</p>
+<h2>3. 放入unsortedbin链表</h2>
+<h3>3.1 待释放chunk不是通过mmap分配的</h3>
+<pre><code>/*Consolidate other non-mmapped chunks as they arrive.*/
+else if (!chunk_is_mmapped(p)) 
+{
+    /* If we're single-threaded, don't lock the arena.  */
+    if (SINGLE_THREAD_P)
+        have_lock = true;
+    if (!have_lock)
+        __libc_lock_lock (av-&gt;mutex);
+    nextchunk = chunk_at_offset(p, size);
+    /* Lightweight tests: check whether the block is already the top block.  */
+    if (__glibc_unlikely (p == av-&gt;top))
+        malloc_printerr (&quot;double free or corruption (top)&quot;);
+    /* Or whether the next chunk is beyond the boundaries of the arena.  */
+    if (__builtin_expect (contiguous (av) &amp;&amp; (char *) nextchunk 
+        &gt;= ((char *) av-&gt;top + chunksize(av-&gt;top)), 0))
+        malloc_printerr (&quot;double free or corruption (out)&quot;);
+    /* Or whether the block is actually not marked used.  */
+    if (__glibc_unlikely (!prev_inuse(nextchunk)))
+        malloc_printerr (&quot;double free or corruption (!prev)&quot;);
+</code></pre>
+
+<p>再次进行一些轻量级的测试，主要测试内容有以下3个方面：<br />
+test 1：当前释放的chunk p是否为top chunk<br />
+test 2：next chunk是否超出了arena范围<br />
+test 3：再次检查当前chunk是否为inuse</p>
+<pre><code>    nextsize = chunksize(nextchunk);
+    if (__builtin_expect (chunksize_nomask (nextchunk) &lt;= 2 * SIZE_SZ, 0)
+        || __builtin_expect (nextsize &gt;= av-&gt;system_mem, 0))
+        malloc_printerr (&quot;free(): invalid next size (normal)&quot;);
+</code></pre>
+
+<p>next chunk的size字段必须大于2*SIZE_SZ且小于av-&gt;system_mem（av-&gt;sytem_mem就是heap段的大小）</p>
+<pre><code>    free_perturb (chunk2mem(p), size - 2 * SIZE_SZ);
+    //进行字段填充
+
+    /* consolidate backward */
+    if (!prev_inuse(p)) 
+    {
+        prevsize = prev_size (p);
+        size += prevsize;
+        p = chunk_at_offset(p, -((long) prevsize));
+        unlink(av, p, bck, fwd);
+    }
+</code></pre>
+
+<p>如果pre chunk处于free状态，则前向合并（unlink操作）。</p>
+<pre><code>    if (nextchunk != av-&gt;top) 
+    {
+        /* get and clear inuse bit */
+        nextinuse = inuse_bit_at_offset(nextchunk, nextsize);
+
+        /* consolidate forward */
+        if (!nextinuse) 
+        {
+            unlink(av, nextchunk, bck, fwd);
+            size += nextsize;
+        } 
+        else
+            clear_inuse_bit_at_offset(nextchunk, 0);
+</code></pre>
+
+<p>如果next chunk不为top chunk且处于free状态，则后向合并。否则修改next chunk的preinuse字段为0，标志当前chunk已被释放。</p>
+<pre><code>        /*
+        Place the chunk in unsorted chunk list. Chunks are
+        not placed into regular bins until after they have
+        been given one chance to be used in malloc.
+        */
+        bck = unsorted_chunks(av);
+        fwd = bck-&gt;fd;
+        if (__glibc_unlikely (fwd-&gt;bk != bck))
+            malloc_printerr (&quot;free(): corrupted unsorted chunks&quot;);
+        p-&gt;fd = fwd;
+        p-&gt;bk = bck;
+        if (!in_smallbin_range(size))
+        {
+            p-&gt;fd_nextsize = NULL;
+            p-&gt;bk_nextsize = NULL;
+            //largebin chunk有相应的fd_nextsize和bk_nextsize字段，需要将其清0
+        }
+        bck-&gt;fd = p;
+        fwd-&gt;bk = p;
+
+        set_head(p, size | PREV_INUSE);
+        //设置chunk p的PREV_INUSE字段为1
+        set_foot(p, size);
+        //设置next chunk的presize字段为当前chunk p的size
+        check_free_chunk(av, p);
+    }
+</code></pre>
+
+<p>然后将chunk p加入unsortedbin链表中，并修改当前unsortedbin链表指针及chunk p相应链表指针，设置chunk p相应字段值，然后调用check_free_chunk()对chunk p进行检查。</p>
+<pre><code>    /*If the chunk borders the current high end of memory,consolidate into top*/
+    else 
+    {
+        size += nextsize;
+        set_head(p, size | PREV_INUSE);
+        av-&gt;top = p;
+        check_chunk(av, p);
+    }
+</code></pre>
+
+<p>如果next chunk为top chunk，则将其合并到top chunk中。</p>
+<pre><code>    /*
+    If freeing a large space, consolidate possibly-surrounding
+    chunks. Then, if the total unused topmost memory exceeds trim
+    threshold, ask malloc_trim to reduce top.
+
+    Unless max_fast is 0, we don't know if there are fastbins
+    bordering top, so we cannot tell for sure whether threshold
+    has been reached unless fastbins are consolidated.  But we
+    don't want to consolidate on each free.  As a compromise,
+    consolidation is performed if FASTBIN_CONSOLIDATION_THRESHOLD
+    is reached.
+    */
+
+    if ((unsigned long)(size) &gt;= FASTBIN_CONSOLIDATION_THRESHOLD) 
+    {
+        if (atomic_load_relaxed (&amp;av-&gt;have_fastchunks))
+            malloc_consolidate(av);
+        if (av == &amp;main_arena) 
+        {
+            #ifndef MORECORE_CANNOT_TRIM
+            if ((unsigned long)(chunksize(av-&gt;top)) &gt;= (unsigned long)(mp_.trim_threshold))
+                systrim(mp_.top_pad, av);
+            #endif
+        } 
+        else 
+        {
+            /* Always try heap_trim(), even if the top chunk is not
+            large, because the corresponding heap might go away.  */
+            heap_info *heap = heap_for_ptr(top(av));
+
+            assert(heap-&gt;ar_ptr == av);
+            heap_trim(heap, mp_.top_pad);
+        }
+    }
+    if (!have_lock)
+      __libc_lock_unlock (av-&gt;mutex);
+}
+/*If the chunk was allocated via mmap, release via munmap().*/
+</code></pre>
+
+<p>如果释放了一个很大的chunk，导致当前某个空闲chunk的size大于一个阈值（FASTBIN_CONSOLIDATION_THRESHOLD=0x10000），则对当前fastbin中的chunk进行合并（调用malloc_consolidate()函数），并对top chunk进行剪枝。<br />
+<strong>注：一个重要的只是点，即释放一个大于0x10000的chunk时，能够导致fastbin链表中的chunk进行合并</strong></p>
+<h3>3.2 如果待释放chunk是通过mmap分配的</h3>
+<p>很简单，调用munmap_chunk即可。</p>
+<pre><code>else {
+    munmap_chunk (p);
+}
+</code></pre>
+
+<p>其中munmap_chunk的定义如下所示：</p>
+<pre><code>static void munmap_chunk (mchunkptr p)
+{
+    INTERNAL_SIZE_T size = chunksize (p);
+    assert (chunk_is_mmapped (p));
+
+    /* Do nothing if the chunk is a faked mmapped chunk in the dumped
+    main arena.  We never free this memory.  */
+    if (DUMPED_MAIN_ARENA_CHUNK (p))
+        return;
+</code></pre>
+
+<p>到底什么是DUMPED_MAIN_ARENA_CHUNK?</p>
+<pre><code>    uintptr_t block = (uintptr_t) p - prev_size (p);
+    size_t total_size = prev_size (p) + size;
+
+    /* Unfortunately we have to do the compilers job by hand here.  Normally
+    we would test BLOCK and TOTAL-SIZE separately for compliance with the
+    page size.  But gcc does not recognize the optimization possibility
+    (in the moment at least) so we combine the two values into one before
+    the bit test.  */
+    if (__builtin_expect (((block | total_size) &amp; (GLRO (dl_pagesize) - 1)) != 0, 0))
+        malloc_printerr (&quot;munmap_chunk(): invalid pointer&quot;);
+    //检查是否页对齐
+    atomic_decrement (&amp;mp_.n_mmaps);
+    atomic_add (&amp;mp_.mmapped_mem, -total_size);
+</code></pre>
+
+<p>当前mmap出来的区域减1，mmap出来的总大小减去total_size</p>
+<pre><code>    /* If munmap failed the process virtual memory address space is in a
+    bad shape.  Just leave the block hanging around, the process will
+    terminate shortly anyway since not much can be done.  */
+    __munmap ((char *) block, total_size);
+}   
+</code></pre>
+
+
+</body>
+</html>
+<!-- This document was created with MarkdownPad, the Markdown editor for Windows (http://markdownpad.com) -->
