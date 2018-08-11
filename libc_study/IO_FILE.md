@@ -126,37 +126,58 @@ C标准库的I/O缓冲主要有以下三种类型：
 
 如下面程序所示（stdin行缓冲）：
 
-	#include <</span>stdlib.h>
-	#include <</span>stdio.h>
-	#include <</span>sys/types.h>
-	#include <</span>sys/stat.h>
-	#include <</span>fcntl.h>
+	#include <stdlib.h>
+	#include <stdio.h>
+	#include <sys/types.h>
+	#include <sys/stat.h>
+	#include <fcntl.h>
 	
 	int main(void)
 	{
 	  char buf[5];
 	  FILE *myfile =stdin;
-	  printf("before reading/n");
-	  printf("read buffer base %p/n", myfile->_IO_read_base);
-	  printf("read buffer length %d/n", myfile->_IO_read_end - myfile->_IO_read_base);
-	  printf("write buffer base %p/n", myfile->_IO_write_base);
-	  printf("write buffer length %d/n", myfile->_IO_write_end - myfile->_IO_write_base);
-	  printf("buf buffer base %p/n", myfile->_IO_buf_base);
-	  printf("buf buffer length %d/n", myfile->_IO_buf_end - myfile->_IO_buf_base);
-	  printf("/n");
-	  fgets(buf, 5, myfile);
-	  fputs(buf, myfile);
-	  printf("/n");
-	  printf("after reading/n");
-	  printf("read buffer base %p/n", myfile->_IO_read_base);
-	  printf("read buffer length %d/n", myfile->_IO_read_end - myfile->_IO_read_base);
-	  printf("write buffer base %p/n", myfile->_IO_write_base);
-	  printf("write buffer length %d/n", myfile->_IO_write_end - myfile->_IO_write_base);
-	  printf("buf buffer base %p/n", myfile->_IO_buf_base);
-	  printf("buf buffer length %d/n", myfile->_IO_buf_end - myfile->_IO_buf_base);
+	  printf("before reading\n");
+	  printf("read buffer base %p\n", myfile->_IO_read_base);
+	  printf("read buffer end %p\n",myfile->_IO_read_end);
+	  printf("read buffer ptr %p\n",myfile->_IO_read_ptr);
+	  printf("read buffer length %d\n", myfile->_IO_read_end - myfile->_IO_read_base);
+	  
+	  printf("write buffer base %p\n", myfile->_IO_write_base);
+	  printf("write buffer end %p\n",myfile->_IO_write_end);
+	  printf("write buffer ptr %p\n",myfile->_IO_write_ptr);
+	  printf("write buffer length %d\n", myfile->_IO_write_end - myfile->_IO_write_base);
+	  
 	
+	  printf("buf buffer base %p\n", myfile->_IO_buf_base);
+	  printf("buf buffer end %d\n",myfile->_IO_buf_end);
+	  printf("buf buffer length %d\n", myfile->_IO_buf_end - myfile->_IO_buf_base);
+	  
+	  printf("\n");
+	  fgets(buf, 5, myfile);
+	  fputs(buf, myfile);	//这里需要注意，stdin流是只能从中读入内容而无法写入
+	  printf("\n");
+	  
+	  printf("after reading\n");
+	  printf("read buffer base %p\n", myfile->_IO_read_base);
+	  printf("read buffer end %p\n",myfile->_IO_read_end);
+	  printf("read buffer ptr %p\n",myfile->_IO_read_ptr);
+	  printf("read buffer length %d\n", myfile->_IO_read_end - myfile->_IO_read_base);
+	
+	  printf("write buffer base %p\n", myfile->_IO_write_base);
+	  printf("write buffer end %p\n",myfile->_IO_write_end);
+	  printf("write buffer ptr %p\n",myfile->_IO_write_ptr);
+	  printf("write buffer length %d\n", myfile->_IO_write_end - myfile->_IO_write_base);
+	    
+	  printf("buf buffer base %p\n", myfile->_IO_buf_base);
+	  printf("buf buffer end %p\n",myfile->_IO_buf_end);
+	  printf("buf buffer length %d\n", myfile->_IO_buf_end - myfile->_IO_buf_base);
+	  
 	  return 0;
 	}
+
+运行结果如下所示：  
+![stdin_result](https://raw.githubusercontent.com/fade-vivida/libc-linux-source-code-study/master/libc_study/picture/io0.JPG)
+
 ### 3.3 无缓冲 ###
 无缓冲：用户程序每次调库函数做写操作都要通过系统调用写回内核。  
 标准错误（stderr）输出通常是无缓冲的,这样用户程序产生的错误信息可以尽快输出到设备。
