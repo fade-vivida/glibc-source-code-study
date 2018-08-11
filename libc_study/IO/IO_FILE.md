@@ -154,7 +154,7 @@ C标准库的I/O缓冲主要有以下三种类型：
 	  
 	  printf("\n");
 	  fgets(buf, 5, myfile);
-	  fputs(buf, myfile);	//这里需要注意，stdin流是只能从中读入内容而无法写入
+	  fputs(buf, myfile);	//这里需要注意，stdin流是只能从中读入内容而无法写入（fp->flag & _IO_NO_WRITES == 1)
 	  printf("\n");
 	  
 	  printf("after reading\n");
