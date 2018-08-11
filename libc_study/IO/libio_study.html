@@ -1,0 +1,472 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>libio_study</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+<style type="text/css">
+/* GitHub stylesheet for MarkdownPad (http://markdownpad.com) */
+/* Author: Nicolas Hery - http://nicolashery.com */
+/* Version: b13fe65ca28d2e568c6ed5d7f06581183df8f2ff */
+/* Source: https://github.com/nicolahery/markdownpad-github */
+
+/* RESET
+=============================================================================*/
+
+html, body, div, span, applet, object, iframe, h1, h2, h3, h4, h5, h6, p, blockquote, pre, a, abbr, acronym, address, big, cite, code, del, dfn, em, img, ins, kbd, q, s, samp, small, strike, strong, sub, sup, tt, var, b, u, i, center, dl, dt, dd, ol, ul, li, fieldset, form, label, legend, table, caption, tbody, tfoot, thead, tr, th, td, article, aside, canvas, details, embed, figure, figcaption, footer, header, hgroup, menu, nav, output, ruby, section, summary, time, mark, audio, video {
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+/* BODY
+=============================================================================*/
+
+body {
+  font-family: Helvetica, arial, freesans, clean, sans-serif;
+  font-size: 14px;
+  line-height: 1.6;
+  color: #333;
+  background-color: #fff;
+  padding: 20px;
+  max-width: 960px;
+  margin: 0 auto;
+}
+
+body>*:first-child {
+  margin-top: 0 !important;
+}
+
+body>*:last-child {
+  margin-bottom: 0 !important;
+}
+
+/* BLOCKS
+=============================================================================*/
+
+p, blockquote, ul, ol, dl, table, pre {
+  margin: 15px 0;
+}
+
+/* HEADERS
+=============================================================================*/
+
+h1, h2, h3, h4, h5, h6 {
+  margin: 20px 0 10px;
+  padding: 0;
+  font-weight: bold;
+  -webkit-font-smoothing: antialiased;
+}
+
+h1 tt, h1 code, h2 tt, h2 code, h3 tt, h3 code, h4 tt, h4 code, h5 tt, h5 code, h6 tt, h6 code {
+  font-size: inherit;
+}
+
+h1 {
+  font-size: 28px;
+  color: #000;
+}
+
+h2 {
+  font-size: 24px;
+  border-bottom: 1px solid #ccc;
+  color: #000;
+}
+
+h3 {
+  font-size: 18px;
+}
+
+h4 {
+  font-size: 16px;
+}
+
+h5 {
+  font-size: 14px;
+}
+
+h6 {
+  color: #777;
+  font-size: 14px;
+}
+
+body>h2:first-child, body>h1:first-child, body>h1:first-child+h2, body>h3:first-child, body>h4:first-child, body>h5:first-child, body>h6:first-child {
+  margin-top: 0;
+  padding-top: 0;
+}
+
+a:first-child h1, a:first-child h2, a:first-child h3, a:first-child h4, a:first-child h5, a:first-child h6 {
+  margin-top: 0;
+  padding-top: 0;
+}
+
+h1+p, h2+p, h3+p, h4+p, h5+p, h6+p {
+  margin-top: 10px;
+}
+
+/* LINKS
+=============================================================================*/
+
+a {
+  color: #4183C4;
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+/* LISTS
+=============================================================================*/
+
+ul, ol {
+  padding-left: 30px;
+}
+
+ul li > :first-child, 
+ol li > :first-child, 
+ul li ul:first-of-type, 
+ol li ol:first-of-type, 
+ul li ol:first-of-type, 
+ol li ul:first-of-type {
+  margin-top: 0px;
+}
+
+ul ul, ul ol, ol ol, ol ul {
+  margin-bottom: 0;
+}
+
+dl {
+  padding: 0;
+}
+
+dl dt {
+  font-size: 14px;
+  font-weight: bold;
+  font-style: italic;
+  padding: 0;
+  margin: 15px 0 5px;
+}
+
+dl dt:first-child {
+  padding: 0;
+}
+
+dl dt>:first-child {
+  margin-top: 0px;
+}
+
+dl dt>:last-child {
+  margin-bottom: 0px;
+}
+
+dl dd {
+  margin: 0 0 15px;
+  padding: 0 15px;
+}
+
+dl dd>:first-child {
+  margin-top: 0px;
+}
+
+dl dd>:last-child {
+  margin-bottom: 0px;
+}
+
+/* CODE
+=============================================================================*/
+
+pre, code, tt {
+  font-size: 12px;
+  font-family: Consolas, "Liberation Mono", Courier, monospace;
+}
+
+code, tt {
+  margin: 0 0px;
+  padding: 0px 0px;
+  white-space: nowrap;
+  border: 1px solid #eaeaea;
+  background-color: #f8f8f8;
+  border-radius: 3px;
+}
+
+pre>code {
+  margin: 0;
+  padding: 0;
+  white-space: pre;
+  border: none;
+  background: transparent;
+}
+
+pre {
+  background-color: #f8f8f8;
+  border: 1px solid #ccc;
+  font-size: 13px;
+  line-height: 19px;
+  overflow: auto;
+  padding: 6px 10px;
+  border-radius: 3px;
+}
+
+pre code, pre tt {
+  background-color: transparent;
+  border: none;
+}
+
+kbd {
+    -moz-border-bottom-colors: none;
+    -moz-border-left-colors: none;
+    -moz-border-right-colors: none;
+    -moz-border-top-colors: none;
+    background-color: #DDDDDD;
+    background-image: linear-gradient(#F1F1F1, #DDDDDD);
+    background-repeat: repeat-x;
+    border-color: #DDDDDD #CCCCCC #CCCCCC #DDDDDD;
+    border-image: none;
+    border-radius: 2px 2px 2px 2px;
+    border-style: solid;
+    border-width: 1px;
+    font-family: "Helvetica Neue",Helvetica,Arial,sans-serif;
+    line-height: 10px;
+    padding: 1px 4px;
+}
+
+/* QUOTES
+=============================================================================*/
+
+blockquote {
+  border-left: 4px solid #DDD;
+  padding: 0 15px;
+  color: #777;
+}
+
+blockquote>:first-child {
+  margin-top: 0px;
+}
+
+blockquote>:last-child {
+  margin-bottom: 0px;
+}
+
+/* HORIZONTAL RULES
+=============================================================================*/
+
+hr {
+  clear: both;
+  margin: 15px 0;
+  height: 0px;
+  overflow: hidden;
+  border: none;
+  background: transparent;
+  border-bottom: 4px solid #ddd;
+  padding: 0;
+}
+
+/* TABLES
+=============================================================================*/
+
+table th {
+  font-weight: bold;
+}
+
+table th, table td {
+  border: 1px solid #ccc;
+  padding: 6px 13px;
+}
+
+table tr {
+  border-top: 1px solid #ccc;
+  background-color: #fff;
+}
+
+table tr:nth-child(2n) {
+  background-color: #f8f8f8;
+}
+
+/* IMAGES
+=============================================================================*/
+
+img {
+  max-width: 100%
+}
+</style>
+<script type="text/javascript" src="directory.js"></script>
+</head>
+<body>
+<h1>Glibc文件流函数的实现机制</h1>
+<p>glibc中关于文件流函数（fopen，fread，fwrite等）的实现源代码位于libio目录下。  </p>
+<h2>1. fopen</h2>
+<p><strong>iofopen.c</strong> 是fopen函数实现的关键代码，其中包含以下两个关键函数。</p>
+<pre><code>_IO_FILE *
+_IO_new_fopen (const char *filename, const char *mode)
+{
+    return __fopen_internal (filename, mode, 1);
+}
+</code></pre>
+
+<p>当我们平时在写C程序调用fopen函数时，实际调用的函数就是_IO_new_fopen函数（在iofopen.c中可以看到关于fopen与该函数的链接及符号对应）。然后该函数又会调用__fopen_internal实现真正的函数功能。</p>
+<p>__fopen_internal函数关键代码如下所示：</p>
+<pre><code>_IO_FILE * __fopen_internal (const char *filename, const char *mode, int is32)
+{
+    struct locked_FILE
+    {
+        struct _IO_FILE_plus fp;
+        #ifdef _IO_MTSAFE_IO
+            _IO_lock_t lock;
+        #endif
+        struct _IO_wide_data wd;
+    } *new_f = (struct locked_FILE *) malloc (sizeof (struct locked_FILE));
+    //在该函数中又定义了一个结构体，该结构体其实主要包含3个元素，(struct _IO_FILE_plus)fp，_IO_lock_t lock，(struct _IO_wide_data)wd
+    if (new_f == NULL)
+        return NULL;
+    #ifdef _IO_MTSAFE_IO
+        new_f-&gt;fp.file._lock = &amp;new_f-&gt;lock;
+    #endif
+</code></pre>
+
+<p><a href = "#1"></p>
+<pre><code>    _IO_no_init (&amp;new_f-&gt;fp.file, 0, 0, &amp;new_f-&gt;wd, &amp;_IO_wfile_jumps);  //调用_IO_old_init函数进行初始化
+</code></pre>
+
+<p></a></p>
+<pre><code>    _IO_JUMPS (&amp;new_f-&gt;fp) = &amp;_IO_file_jumps;   //设置fp的vtable字段
+</code></pre>
+
+<p><a href = "#2"></p>
+<pre><code>    _IO_new_file_init_internal (&amp;new_f-&gt;fp);    //再次调用初始化函数（该函数完成其他的初始化功能）
+</code></pre>
+
+<p></a></p>
+<pre><code>    #if  !_IO_UNIFIED_JUMPTABLES
+        new_f-&gt;fp.vtable = NULL;
+    #endif
+    if (_IO_file_fopen ((_IO_FILE *) new_f, filename, mode, is32) != NULL)
+        return __fopen_maybe_mmap (&amp;new_f-&gt;fp.file);
+</code></pre>
+
+<p><a href = "#3"></p>
+<pre><code>    _IO_un_link (&amp;new_f-&gt;fp);
+</code></pre>
+
+<p></a></p>
+<pre><code>    free (new_f);
+    return NULL;
+}
+</code></pre>
+
+<p><a name = "1">
+_IO_no_init函数实现源代码：
+</a></p>
+<pre><code>void _IO_no_init (_IO_FILE *fp, int flags, int orientation,struct _IO_wide_data *wd, const struct _IO_jump_t *jmp)
+{
+    _IO_old_init (fp, flags);
+    fp-&gt;_mode = orientation;    //初始化时，fp-&gt;_mode = 0
+    if (orientation &gt;= 0)
+    {
+        //对（struct _IO_FILE)fp的_wide_data字段进行初始化
+        fp-&gt;_wide_data = wd;
+        fp-&gt;_wide_data-&gt;_IO_buf_base = NULL;
+        fp-&gt;_wide_data-&gt;_IO_buf_end = NULL;
+        fp-&gt;_wide_data-&gt;_IO_read_base = NULL;
+        fp-&gt;_wide_data-&gt;_IO_read_ptr = NULL;
+        fp-&gt;_wide_data-&gt;_IO_read_end = NULL;
+        fp-&gt;_wide_data-&gt;_IO_write_base = NULL;
+        fp-&gt;_wide_data-&gt;_IO_write_ptr = NULL;
+        fp-&gt;_wide_data-&gt;_IO_write_end = NULL;
+        fp-&gt;_wide_data-&gt;_IO_save_base = NULL;
+        fp-&gt;_wide_data-&gt;_IO_backup_base = NULL;
+        fp-&gt;_wide_data-&gt;_IO_save_end = NULL;
+
+        fp-&gt;_wide_data-&gt;_wide_vtable = jmp;
+    }
+    else
+        /* Cause predictable crash when a wide function is called on a byte stream.  */
+        fp-&gt;_wide_data = (struct _IO_wide_data *) -1L;
+    fp-&gt;_freeres_list = NULL;
+}
+</code></pre>
+
+<p>_IO_old_init函数实现代码：</p>
+<pre><code>void _IO_old_init (_IO_FILE *fp, int flags)
+{
+    fp-&gt;_flags = _IO_MAGIC|flags;   //_IO_MAGIC = 0xFBAD0000
+    fp-&gt;_flags2 = 0;
+    if (stdio_needs_locking)
+    fp-&gt;_flags2 |= _IO_FLAGS2_NEED_LOCK;    //_IO_FLAGS2_NEED_LOCK = 128
+    fp-&gt;_IO_buf_base = NULL;
+    fp-&gt;_IO_buf_end = NULL;
+    fp-&gt;_IO_read_base = NULL;
+    fp-&gt;_IO_read_ptr = NULL;
+    fp-&gt;_IO_read_end = NULL;
+    fp-&gt;_IO_write_base = NULL;
+    fp-&gt;_IO_write_ptr = NULL;
+    fp-&gt;_IO_write_end = NULL;
+    fp-&gt;_chain = NULL; /* Not necessary. */
+
+    fp-&gt;_IO_save_base = NULL;
+    fp-&gt;_IO_backup_base = NULL;
+    fp-&gt;_IO_save_end = NULL;
+    fp-&gt;_markers = NULL;
+    fp-&gt;_cur_column = 0;
+    #if _IO_JUMPS_OFFSET
+        fp-&gt;_vtable_offset = 0;
+    #endif
+    #ifdef _IO_MTSAFE_IO
+      if (fp-&gt;_lock != NULL)
+        _IO_lock_init (*fp-&gt;_lock);
+    #endif
+}
+</code></pre>
+
+<p><a name="2">
+_IO_new_file_init_internal函数实现代码：
+</a></p>
+<pre><code>void _IO_new_file_init_internal (struct _IO_FILE_plus *fp)
+{
+    /* POSIX.1 allows another file handle to be used to change the position of our file descriptor.  Hence we actually don't know the actual position before we do the first fseek (and until a following fflush). */
+    fp-&gt;file._offset = _IO_pos_BAD;
+    fp-&gt;file._IO_file_flags |= CLOSED_FILEBUF_FLAGS;
+
+    _IO_link_in (fp);
+    fp-&gt;file._fileno = -1;
+}
+</code></pre>
+
+<p><a name="3">
+_IO_un_link
+</a></p>
+<pre><code>_IO_un_link (struct _IO_FILE_plus *fp)
+{
+    if (fp-&gt;file._flags &amp; _IO_LINKED)
+    {
+        struct _IO_FILE **f;
+        #ifdef _IO_MTSAFE_IO
+            _IO_cleanup_region_start_noarg (flush_cleanup);
+            _IO_lock_lock (list_all_lock);
+            run_fp = (_IO_FILE *) fp;
+            _IO_flockfile ((_IO_FILE *) fp);
+        #endif
+        if (_IO_list_all == NULL);
+        else if (fp == _IO_list_all)
+            _IO_list_all = (struct _IO_FILE_plus *) _IO_list_all-&gt;file._chain;
+        else
+            for (f = &amp;_IO_list_all-&gt;file._chain; *f; f = &amp;(*f)-&gt;_chain)
+                if (*f == (_IO_FILE *) fp)
+                {
+                    *f = fp-&gt;file._chain;
+                    break;
+                }
+        fp-&gt;file._flags &amp;= ~_IO_LINKED;
+        #ifdef _IO_MTSAFE_IO
+            _IO_funlockfile ((_IO_FILE *) fp);
+            run_fp = NULL;
+            _IO_lock_unlock (list_all_lock);
+            _IO_cleanup_region_end (0);
+        #endif
+   }
+}
+</code></pre>
+
+
+</body>
+</html>
+<!-- This document was created with MarkdownPad, the Markdown editor for Windows (http://markdownpad.com) -->
