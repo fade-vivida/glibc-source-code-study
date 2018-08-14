@@ -91,7 +91,31 @@ open，read函数。posix标准（read，open函数均属于此标准），在�
 		  /*  char* _save_gptr;  char* _save_egptr; */
 		
 		  _IO_lock_t *_lock;
-		#ifdef _IO_USE_OLD_IO_FILE
+	#ifdef _IO_USE_OLD_IO_FILE
+	};
+	struct _IO_FILE_complete
+	{
+		struct _IO_FILE _file;
+	#endif
+		#if defined _G_IO_IO_FILE_VERSION && _G_IO_IO_FILE_VERSION == 0x20001
+	  		_IO_off64_t _offset;
+			# if defined _LIBC || defined _GLIBCPP_USE_WCHAR_T
+	  			/* Wide character stream stuff.  */
+	  			struct _IO_codecvt *_codecvt;
+	  			struct _IO_wide_data *_wide_data;
+	  			struct _IO_FILE *_freeres_list;
+	  			void *_freeres_buf;
+			# else
+	  			void *__pad1;
+	  			void *__pad2;
+	  			void *__pad3;
+	  			void *__pad4;
+			# endif
+	  		size_t __pad5;
+	  		int _mode;
+	  		/* Make sure we don't get into trouble again.  */
+	  		char _unused2[15 * sizeof (int) - 4 * sizeof (void *) - sizeof (size_t)];
+		#endif
 	};
 其中有如下几个关键字段与文本所要讲述的内容密切相关。
 
