@@ -41,98 +41,145 @@ open，read函数。posix标准（read，open函数均属于此标准），在�
 
 ## 2. \_IO\_FILE，\_IO\_FILE_plus结构 ##
 谈到标准IO就不得不提glibc中关于\_IO\_FILE和\_IO\_FILE\_plus两个结构体的定义。
-
-	struct _IO_FILE_plus
-	{
-	  _IO_FILE file;
-	  const struct _IO_jump_t *vtable;
-	};
+<pre class = "prettyprint lang-javascript">
+struct _IO_FILE_plus
+{
+  _IO_FILE file;
+  const struct _IO_jump_t *vtable;
+};
+</pre>
 可以看到\_IO\_FILE\_plus结构体就是\_IO\_FILE结构体再加上一个\_IO\_jump\_t类型的结构体指针。  
+## 2.1 \_IO\_FILE结构体解析 ##
 其中\_IO\_FILE结构体定义如下：
-
-	struct _IO_FILE {
-		  int _flags;		/* High-order word is _IO_MAGIC; rest is flags. */
-		#define _IO_file_flags _flags
-		
-		  /* The following pointers correspond to the C++ streambuf protocol. */
-		  /* Note:  Tk uses the _IO_read_ptr and _IO_read_end fields directly. */
-		  char* _IO_read_ptr;	/* Current read pointer */
-		  char* _IO_read_end;	/* End of get area. */
-		  char* _IO_read_base;	/* Start of putback+get area. */
-		  char* _IO_write_base;	/* Start of put area. */
-		  char* _IO_write_ptr;	/* Current put pointer. */
-		  char* _IO_write_end;	/* End of put area. */
-		  char* _IO_buf_base;	/* Start of reserve area. */
-		  char* _IO_buf_end;	/* End of reserve area. */
+<pre class = "prettyprint lang-javascript">
+struct _IO_FILE {
+	  int _flags;		/* High-order word is _IO_MAGIC; rest is flags. */
+	#define _IO_file_flags _flags
 	
-		  /* The following fields are used to support backing up and undo. */
-		  char *_IO_save_base; /* Pointer to start of non-current get area. */
-		  char *_IO_backup_base;  /* Pointer to first valid character of backup area */
-		  char *_IO_save_end; /* Pointer to end of non-current get area. */
-		
-		  struct _IO_marker *_markers;
-		
-		  struct _IO_FILE *_chain;
-		
-		  int _fileno;
-		#if 0
-		  int _blksize;
-		#else
-		  int _flags2;
-		#endif
-		  _IO_off_t _old_offset; /* This used to be _offset but it's too small.  */
-		
-		#define __HAVE_COLUMN /* temporary */
-		  /* 1+column number of pbase(); 0 is unknown. */
-		  unsigned short _cur_column;
-		  signed char _vtable_offset;
-		  char _shortbuf[1];
-		
-		  /*  char* _save_gptr;  char* _save_egptr; */
-		
-		  _IO_lock_t *_lock;
-	#ifdef _IO_USE_OLD_IO_FILE
-	};
-	struct _IO_FILE_complete
-	{
-		struct _IO_FILE _file;
+	  /* The following pointers correspond to the C++ streambuf protocol. */
+	  /* Note:  Tk uses the _IO_read_ptr and _IO_read_end fields directly. */
+	  char* _IO_read_ptr;	/* Current read pointer */
+	  char* _IO_read_end;	/* End of get area. */
+	  char* _IO_read_base;	/* Start of putback+get area. */
+	  char* _IO_write_base;	/* Start of put area. */
+	  char* _IO_write_ptr;	/* Current put pointer. */
+	  char* _IO_write_end;	/* End of put area. */
+	  char* _IO_buf_base;	/* Start of reserve area. */
+	  char* _IO_buf_end;	/* End of reserve area. */
+
+	  /* The following fields are used to support backing up and undo. */
+	  char *_IO_save_base; /* Pointer to start of non-current get area. */
+	  char *_IO_backup_base;  /* Pointer to first valid character of backup area */
+	  char *_IO_save_end; /* Pointer to end of non-current get area. */
+	
+	  struct _IO_marker *_markers;
+	
+	  struct _IO_FILE *_chain;		//保存文件指针的链表结构，链表头保存在\_IO\_list\_all全局变量中
+	
+	  int _fileno;		//文件描述符，是sys_open返回值（stdin为0，stdout为1，stderr为2）
+	#if 0
+	  int _blksize;
+	#else
+	  int _flags2;
 	#endif
-		#if defined _G_IO_IO_FILE_VERSION && _G_IO_IO_FILE_VERSION == 0x20001
-	  		_IO_off64_t _offset;
-			# if defined _LIBC || defined _GLIBCPP_USE_WCHAR_T
-	  			/* Wide character stream stuff.  */
-	  			struct _IO_codecvt *_codecvt;
-	  			struct _IO_wide_data *_wide_data;
-	  			struct _IO_FILE *_freeres_list;
-	  			void *_freeres_buf;
-			# else
-	  			void *__pad1;
-	  			void *__pad2;
-	  			void *__pad3;
-	  			void *__pad4;
-			# endif
-	  		size_t __pad5;
-	  		int _mode;
-	  		/* Make sure we don't get into trouble again.  */
-	  		char _unused2[15 * sizeof (int) - 4 * sizeof (void *) - sizeof (size_t)];
-		#endif
-	};
+	  _IO_off_t _old_offset; /* This used to be _offset but it's too small.  */
+	
+	#define __HAVE_COLUMN /* temporary */
+	  /* 1+column number of pbase(); 0 is unknown. */
+	  unsigned short _cur_column;
+	  signed char _vtable_offset;
+	  char _shortbuf[1];
+	
+	  /*  char* _save_gptr;  char* _save_egptr; */
+	
+	  _IO_lock_t *_lock;
+#ifdef _IO_USE_OLD_IO_FILE
+};
+struct _IO_FILE_complete
+{
+	struct _IO_FILE _file;
+#endif
+	#if defined _G_IO_IO_FILE_VERSION && _G_IO_IO_FILE_VERSION == 0x20001
+  		_IO_off64_t _offset;
+		# if defined _LIBC || defined _GLIBCPP_USE_WCHAR_T
+  			/* Wide character stream stuff.  */
+  			struct _IO_codecvt *_codecvt;
+  			struct _IO_wide_data *_wide_data;
+  			struct _IO_FILE *_freeres_list;
+  			void *_freeres_buf;
+		# else
+  			void *__pad1;
+  			void *__pad2;
+  			void *__pad3;
+  			void *__pad4;
+		# endif
+  		size_t __pad5;
+  		int _mode;
+  		/* Make sure we don't get into trouble again.  */
+  		char _unused2[15 * sizeof (int) - 4 * sizeof (void *) - sizeof (size_t)];
+	#endif
+};
+</pre>
 其中有如下几个关键字段与文本所要讲述的内容密切相关。
-
-	1.
-	char* _IO_read_ptr;		//指向"读缓冲区"中下一个要读入的数据的位置
-	char* _IO_read_end;		//指向"读缓冲区"末尾
-	char* _IO_read_base;	//指向"读缓冲区"
-	_IO_read_end - _IO_read_base		//读缓冲区的长度
-	2.
-	char* _IO_write_base;	//指向"写缓冲区"
-	char* _IO_write_ptr;	//指向"写缓冲区"中下一个要写入的数据的位置
-	char* _IO_write_end;	//指向"写缓冲区"末尾
-	3.
-	char* _IO_buf_base;		//指向"缓冲区"
-	char* _IO_buf_end;		//指向"缓冲区"末尾
-
+<pre class = "prettyprint lang-javascript">
+1.
+char* _IO_read_ptr;		//指向"读缓冲区"中下一个要读入的数据的位置
+char* _IO_read_end;		//指向"读缓冲区"末尾
+char* _IO_read_base;		//指向"读缓冲区"
+_IO_read_end - _IO_read_base	//读缓冲区的长度
+2.
+char* _IO_write_base;		//指向"写缓冲区"
+char* _IO_write_ptr;		//指向"写缓冲区"中下一个要写入的数据的位置
+char* _IO_write_end;		//指向"写缓冲区"末尾
+3.
+char* _IO_buf_base;		//指向"缓冲区"
+char* _IO_buf_end;		//指向"缓冲区"末尾
+</pre>
 其中\_IO\_read\_base，\_IO\_write\_base，\_IO\_buf\_base都指向了同一缓冲区
+## 2.2 \_IO\_jump\_t vtable结构体（vtable） ##
+<pre class = "prettyprint lang-javascript">
+struct _IO_jump_t
+{
+    JUMP_FIELD(size_t, __dummy);
+    JUMP_FIELD(size_t, __dummy2);
+    JUMP_FIELD(_IO_finish_t, __finish);
+    JUMP_FIELD(_IO_overflow_t, __overflow);
+    JUMP_FIELD(_IO_underflow_t, __underflow);
+    JUMP_FIELD(_IO_underflow_t, __uflow);
+    JUMP_FIELD(_IO_pbackfail_t, __pbackfail);
+    /* showmany */
+    JUMP_FIELD(_IO_xsputn_t, __xsputn);
+    JUMP_FIELD(_IO_xsgetn_t, __xsgetn);
+    JUMP_FIELD(_IO_seekoff_t, __seekoff);
+    JUMP_FIELD(_IO_seekpos_t, __seekpos);
+    JUMP_FIELD(_IO_setbuf_t, __setbuf);
+    JUMP_FIELD(_IO_sync_t, __sync);
+    JUMP_FIELD(_IO_doallocate_t, __doallocate);
+    JUMP_FIELD(_IO_read_t, __read);
+    JUMP_FIELD(_IO_write_t, __write);
+    JUMP_FIELD(_IO_seek_t, __seek);
+    JUMP_FIELD(_IO_close_t, __close);
+    JUMP_FIELD(_IO_stat_t, __stat);
+    JUMP_FIELD(_IO_showmanyc_t, __showmanyc);
+    JUMP_FIELD(_IO_imbue_t, __imbue);
+#if 0
+    get_column;
+    set_column;
+#endif
+};
+
+//关于JUMP_FIELD的宏定义如下所示：
+#define JUMP_FIELD(TYPE, NAME) TYPE NAME
+</pre>
+从中我们可以看到\_IO\_jump\_t结构体就是一个保存函数指针的列表，其中定义了各种文件流会用到的函数。其中有几个重要的函数，作用如下：  
+1. \_\_xsgetn，fread实际调用的函数  
+2. \_\_xsputn，fwrite实际调用的函数  
+3. \_\_finish，fclose最终会调用的函数  
+4. \_\_overflow，发生内存错误时会调用该函数  
+5. \_\_read，\_IO\_SYSREAD最终会调用的函数指针（如果当前缓冲区中已无数据，则会调用该函数）  
+6. \_\_write，与\_\_read相似  
+7. \_\_doallocate，当流缓冲区buff为空时，调用该分配函数  
+未完待续。。。。。。。。。。。。。。
 ## 3. C标准库的I/O缓存 ##
 C标准库的I/O缓冲主要有以下三种类型：  
 全缓冲，行缓冲，无缓冲  
@@ -149,56 +196,56 @@ C标准库的I/O缓冲主要有以下三种类型：
 2. 或者从行缓冲的文件中读取,并且这次读操作会引发系统调用从内核读取数据
 
 如下面程序所示（stdin行缓冲）：
+<pre class = "prettyprint lang-javascript">
+#include "stdlib.h"
+#include "stdio.h"
+#include "sys/types.h"
+#include "sys/stat.h"
+#include "fcntl.h"
 
-	#include <stdlib.h>
-	#include <stdio.h>
-	#include <sys/types.h>
-	#include <sys/stat.h>
-	#include <fcntl.h>
-	
-	int main(void)
-	{
-	  char buf[5];
-	  FILE *myfile =stdin;
-	  printf("before reading\n");
-	  printf("read buffer base %p\n", myfile->_IO_read_base);
-	  printf("read buffer end %p\n",myfile->_IO_read_end);
-	  printf("read buffer ptr %p\n",myfile->_IO_read_ptr);
-	  printf("read buffer length %d\n", myfile->_IO_read_end - myfile->_IO_read_base);
-	  
-	  printf("write buffer base %p\n", myfile->_IO_write_base);
-	  printf("write buffer end %p\n",myfile->_IO_write_end);
-	  printf("write buffer ptr %p\n",myfile->_IO_write_ptr);
-	  printf("write buffer length %d\n", myfile->_IO_write_end - myfile->_IO_write_base);
-	  
-	
-	  printf("buf buffer base %p\n", myfile->_IO_buf_base);
-	  printf("buf buffer end %d\n",myfile->_IO_buf_end);
-	  printf("buf buffer length %d\n", myfile->_IO_buf_end - myfile->_IO_buf_base);
-	  
-	  printf("\n");
-	  fgets(buf, 5, myfile);
-	  fputs(buf, myfile);	//这里需要注意，stdin流是只能从中读入内容而无法写入（fp->flag & _IO_NO_WRITES == 1)
-	  printf("\n");
-	  
-	  printf("after reading\n");
-	  printf("read buffer base %p\n", myfile->_IO_read_base);
-	  printf("read buffer end %p\n",myfile->_IO_read_end);
-	  printf("read buffer ptr %p\n",myfile->_IO_read_ptr);
-	  printf("read buffer length %d\n", myfile->_IO_read_end - myfile->_IO_read_base);
-	
-	  printf("write buffer base %p\n", myfile->_IO_write_base);
-	  printf("write buffer end %p\n",myfile->_IO_write_end);
-	  printf("write buffer ptr %p\n",myfile->_IO_write_ptr);
-	  printf("write buffer length %d\n", myfile->_IO_write_end - myfile->_IO_write_base);
-	    
-	  printf("buf buffer base %p\n", myfile->_IO_buf_base);
-	  printf("buf buffer end %p\n",myfile->_IO_buf_end);
-	  printf("buf buffer length %d\n", myfile->_IO_buf_end - myfile->_IO_buf_base);
-	  
-	  return 0;
-	}
+int main(void)
+{
+  char buf[5];
+  FILE *myfile =stdin;
+  printf("before reading\n");
+  printf("read buffer base %p\n", myfile->_IO_read_base);
+  printf("read buffer end %p\n",myfile->_IO_read_end);
+  printf("read buffer ptr %p\n",myfile->_IO_read_ptr);
+  printf("read buffer length %d\n", myfile->_IO_read_end - myfile->_IO_read_base);
+  
+  printf("write buffer base %p\n", myfile->_IO_write_base);
+  printf("write buffer end %p\n",myfile->_IO_write_end);
+  printf("write buffer ptr %p\n",myfile->_IO_write_ptr);
+  printf("write buffer length %d\n", myfile->_IO_write_end - myfile->_IO_write_base);
+  
 
+  printf("buf buffer base %p\n", myfile->_IO_buf_base);
+  printf("buf buffer end %d\n",myfile->_IO_buf_end);
+  printf("buf buffer length %d\n", myfile->_IO_buf_end - myfile->_IO_buf_base);
+  
+  printf("\n");
+  fgets(buf, 5, myfile);
+  fputs(buf, myfile);	//这里需要注意，stdin流是只能从中读入内容而无法写入（fp->flag & _IO_NO_WRITES == 1)
+  printf("\n");
+  
+  printf("after reading\n");
+  printf("read buffer base %p\n", myfile->_IO_read_base);
+  printf("read buffer end %p\n",myfile->_IO_read_end);
+  printf("read buffer ptr %p\n",myfile->_IO_read_ptr);
+  printf("read buffer length %d\n", myfile->_IO_read_end - myfile->_IO_read_base);
+
+  printf("write buffer base %p\n", myfile->_IO_write_base);
+  printf("write buffer end %p\n",myfile->_IO_write_end);
+  printf("write buffer ptr %p\n",myfile->_IO_write_ptr);
+  printf("write buffer length %d\n", myfile->_IO_write_end - myfile->_IO_write_base);
+    
+  printf("buf buffer base %p\n", myfile->_IO_buf_base);
+  printf("buf buffer end %p\n",myfile->_IO_buf_end);
+  printf("buf buffer length %d\n", myfile->_IO_buf_end - myfile->_IO_buf_base);
+  
+  return 0;
+}
+</pre>
 运行结果如下所示：  
 ![stdin_result](https://raw.githubusercontent.com/fade-vivida/libc-linux-source-code-study/master/libc_study/picture/io0.JPG)
 
