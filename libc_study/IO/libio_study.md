@@ -46,9 +46,8 @@ _IO_FILE * __fopen_internal (const char *filename, const char *mode, int is32)
 }
 </pre>
 从源代码中可以看出，该函数功能为创建一个locked\_FILE类型的结构体new\_f（该结构体包含3个元素fp，lock，wd）,然后对new\_f进行一系列初始化（包括初始化\_IO\_FILE\_plus结构体各个字段，将fp加入\_IO\_list\_all链表等），最后调用\_IO\_file\_fopen函数打开该文件流指针。
-<a name = "1">
+<a name = "1"></a>
 ## 1.2 \_IO\_no\_init函数实现源代码 ##
-</a>
 <pre class="prettyprint lang-javascript"> 
 void _IO_no_init (_IO_FILE *fp, int flags, int orientation,struct _IO_wide_data *wd, const struct _IO_jump_t *jmp)
 {
@@ -110,9 +109,9 @@ void _IO_old_init (_IO_FILE *fp, int flags)
 	#endif
 }
 </pre>
-<a name="2">
+<a name="2"></a>
 ## 1.4 \_IO\_new\_file\_init\_internal函数实现代码 ##
-</a>
+
 <pre class="prettyprint lang-javascript"> 
 void _IO_new_file_init_internal (struct _IO_FILE_plus *fp)
 {
@@ -137,9 +136,9 @@ CLOSED\_FILEBUF\_FLAGS定义如下：
 ![test](https://raw.githubusercontent.com/fade-vivida/libc-linux-source-code-study/master/libc_study/picture/io1.JPG)  
 实际结果与猜想一致。
 
-<a name="3">
+<a name="3"></a>
 ## 1.5 \_IO\_un\_link函数实现代码 ##
-</a>
+
 该函数功能为从\_IO\_list\_all链表上拆下fp指针。
 <pre class="prettyprint lang-javascript"> 
 _IO_un_link (struct _IO_FILE_plus *fp)
@@ -173,9 +172,9 @@ _IO_un_link (struct _IO_FILE_plus *fp)
 	}
 }
 </pre>
-<a name = "4">
+<a name = "4"></a>
 ## 1.6 \_IO\_link\_in函数实现代码 ##
-</a>
+
 该函数功能为将fp标志的文件流指针插入\_IO\_list\_all链表中。
 <pre class="prettyprint lang-javascript"> 
 void _IO_link_in (struct _IO_FILE_plus *fp)
@@ -246,9 +245,8 @@ _IO_size_t _IO_fread (void *buf, _IO_size_t size, _IO_size_t count, _IO_FILE *fp
 # define COERCE_FILE(FILE) /* Nothing */
 </pre>
 
-<a name = "5">
+<a name = "5"></a>
 ## 2.2 \_IO\_sgetn函数 ##
-</a>
 
 可以看到该函数只是单纯的调用了\_IO\_XSGETN宏。
 <pre class="prettyprint lang-javascript"> 
@@ -293,9 +291,9 @@ _IO_sgetn (_IO_FILE *fp, void *data, _IO_size_t n)
 \_IO\_file\_plus结构体的vtable字段示意图：  
 ![vtable](https://raw.githubusercontent.com/fade-vivida/libc-linux-source-code-study/master/libc_study/picture/io_jump.JPG)
 
-<a name = "6">
+<a name = "6"></a>
 ## 2.3 vtable指针合法性检查 ##
-</a>
+
 IO\_validata\_vtable函数代码如下所示：
 <pre class="prettyprint lang-javascript"> 
 static inline const struct _IO_jump_t *
@@ -350,6 +348,7 @@ void attribute_hidden _IO_vtable_check (void)
 }
 </pre>
 该函数看不懂，大体意思应该是定义了共享模式和非共享模式下文件流vtable字段的检测方法。从实际应用中发现，在libc2.24之前可以在堆中放置一个vtable函数指针列表（伪造\_IO\_FILE结构），但在libc2.24之后该方法不可用，还有新的利用方法，未完待续。。。。见下文
+
 ## 2.4 \_IO\_file\_xsgetn函数 ##
 <pre class = "prettyprint lang-javascript">
 _IO_size_t
@@ -452,9 +451,8 @@ _IO_file_xsgetn (_IO_FILE *fp, void *data, _IO_size_t n)
 }
 libc_hidden_def (_IO_file_xsgetn)
 </pre>
-<a name = "8">
+<a name = "8"></a>
 ## 2.5 \_IO\_switch\_to\_main\_get函数 ##
-</a>
 \_IO\_switch\_to\_main\_get\_area函数定义如下：
 <pre class = "prettyprint lang-javascript">
 void _IO_switch_to_main_get_area (_IO_FILE *fp)
@@ -477,10 +475,11 @@ void _IO_switch_to_main_get_area (_IO_FILE *fp)
 }
 </pre>
 该函数的主要功能为：如果当前文件流标志位定义了备份缓存（fp->flag & _IO_IN_BACKUP == 0x100），则将\_IO\_read\_base，\_IO\_read\_ptr，\_IO\_read\_end指向该缓存。
+<a name = "9"></a>
 ## 2.6 \_IO\_new\_file\_underflow函数 ##
 该函数为vtable->\_\_underflow hook的功能函数，其函数代码如下所示：
 <pre class = "prettyprint lang-javascript">
-<a name = "9">int _IO_new_file_underflow (_IO_FILE *fp)</a>
+int _IO_new_file_underflow (_IO_FILE *fp)
 {
 	_IO_ssize_t count;
 	#if 0
@@ -566,9 +565,8 @@ libc_hidden_ver (_IO_new_file_underflow, _IO_file_underflow)
 </pre>
 
 
-<a name = "7">
+<a name = "7"></a>
 ## 2.7 \_IO\_doallocbuf ##
-</a>
 <pre class = "prettyprint lang-javascript">
 void
 _IO_doallocbuf (_IO_FILE *fp)
@@ -612,9 +610,8 @@ void _IO_setb (_IO_FILE *f, char *b, char *eb, int a)
 libc_hidden_def (_IO_setb)
 </pre>
 可以看到该函数功能为：重新为fp文件流分配一个buff缓冲区。
-<a name = "9">
+<a name = "9"></a>
 ## 2.8 \_IO\_new\_file\_overflow函数 ##
-</a>
 <pre class = "prettyprint lang-javascript">
 _IO_new_file_overflow (_IO_FILE *f, int ch)
 {
