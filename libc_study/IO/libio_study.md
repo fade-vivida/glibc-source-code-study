@@ -472,6 +472,7 @@ libc_hidden_def (_IO_file_xsgetn)
 	fp->_IO_read_ptr = fp->_IO_read_base;
 }
 </pre>
+该函数的主要功能为：如果当前文件流标志位定义了备份缓存（fp->flag & _IO_IN_BACKUP == 0x100），则将\_IO\_read\_base，\_IO\_read\_ptr，\_IO\_read\_end指向该缓存。
 ## 2.6 \_IO\_new\_file\_underflow函数 ##
 该函数为vtable->\_\_underflow hook的功能函数，其函数代码如下所示：
 <pre class = "prettyprint lang-javascript">
@@ -607,6 +608,67 @@ void _IO_setb (_IO_FILE *f, char *b, char *eb, int a)
 libc_hidden_def (_IO_setb)
 </pre>
 可以看到该函数功能为：重新为fp文件流分配一个buff缓冲区。
+<a name = "9">
+## 2.8 \_IO\_new\_file\_overflow函数 ##
+</a>
+<pre class = "prettyprint lang-javascript">
+_IO_new_file_overflow (_IO_FILE *f, int ch)
+{
+	if (f->_flags & _IO_NO_WRITES) /* SET ERROR */
+	{
+		f->_flags |= _IO_ERR_SEEN;
+		__set_errno (EBADF);
+		return EOF;
+	}
+	/* If currently reading or no buffer allocated. */
+	if ((f->_flags & _IO_CURRENTLY_PUTTING) == 0 || f->_IO_write_base == NULL)
+	{
+		/* Allocate a buffer if needed. */
+		if (f->_IO_write_base == NULL)
+		{
+			_IO_doallocbuf (f);
+			_IO_setg (f, f->_IO_buf_base, f->_IO_buf_base, f->_IO_buf_base);
+		}
+		/* Otherwise must be currently reading.
+		If _IO_read_ptr (and hence also _IO_read_end) is at the buffer end,
+		logically slide the buffer forwards one block (by setting the
+		read pointers to all point at the beginning of the block).  This
+		makes room for subsequent output.
+		Otherwise, set the read pointers to _IO_read_end (leaving that
+		alone, so it can continue to correspond to the external position). */
+		if (__glibc_unlikely (_IO_in_backup (f)))
+		{
+			//如果f设置了备份缓存，则替换该备份缓存区为主缓存区
+			size_t nbackup = f->_IO_read_end - f->_IO_read_ptr;
+			_IO_free_backup_area (f);
+			f->_IO_read_base -= MIN (nbackup,f->_IO_read_base - f->_IO_buf_base);
+			f->_IO_read_ptr = f->_IO_read_base;
+		}
+	
+		if (f->_IO_read_ptr == f->_IO_buf_end)
+			f->_IO_read_end = f->_IO_read_ptr = f->_IO_buf_base;
+		f->_IO_write_ptr = f->_IO_read_ptr;
+		f->_IO_write_base = f->_IO_write_ptr;
+		f->_IO_write_end = f->_IO_buf_end;
+		f->_IO_read_base = f->_IO_read_ptr = f->_IO_read_end;
+
+		f->_flags |= _IO_CURRENTLY_PUTTING;
+		if (f->_mode <= 0 && f->_flags & (_IO_LINE_BUF | _IO_UNBUFFERED))
+			f->_IO_write_end = f->_IO_write_ptr;
+	}
+	if (ch == EOF)
+		return _IO_do_write (f, f->_IO_write_base,f->_IO_write_ptr - f->_IO_write_base);
+	if (f->_IO_write_ptr == f->_IO_buf_end ) /* Buffer is really full */
+		if (_IO_do_flush (f) == EOF)
+			return EOF;
+	*f->_IO_write_ptr++ = ch;
+	if ((f->_flags & _IO_UNBUFFERED) || ((f->_flags & _IO_LINE_BUF) && ch == '\n'))
+		if (_IO_do_write (f, f->_IO_write_base,f->_IO_write_ptr - f->_IO_write_base) == EOF)
+		return EOF;
+	return (unsigned char) ch;
+}
+libc_hidden_ver (_IO_new_file_overflow, _IO_file_overflow)
+</pre>
 # 3. fwrite #
 **注：最终调用vtable中的\_\_xsputn**
 <pre class="prettyprint lang-javascript"> 
@@ -633,6 +695,88 @@ _IO_size_t _IO_fwrite (const void *buf, _IO_size_t size, _IO_size_t count, _IO_F
 }
 </pre>
 fwrite函数与fread函数逻辑相似，fwrite函数最终调用的vtable函数链表中的函数为\_\_xsputn。
+
+## 3.1 \_IO\_new\_file\_xsputn函数 ##
+<pre class = "prettyprint lang-javascript">
+_IO_size_t _IO_new_file_xsputn (_IO_FILE *f, const void *data, _IO_size_t n)
+{
+	const char *s = (const char *) data;
+	_IO_size_t to_do = n;
+	int must_flush = 0;
+	_IO_size_t count = 0;
+
+	if (n <= 0)
+		return 0;
+	
+	/* This is an optimized implementation.
+	If the amount to be written straddles a block boundary
+	(or the filebuf is unbuffered), use sys_write directly. */
+
+	/* First figure out how much space is available in the buffer. */
+	if ((f->_flags & _IO_LINE_BUF) && (f->_flags & _IO_CURRENTLY_PUTTING))
+	{
+		count = f->_IO_buf_end - f->_IO_write_ptr;
+		if (count >= n)
+		{
+			const char *p;
+			for (p = s + n; p > s; )
+			{
+				if (*--p == '\n')
+				{
+					count = p - s + 1;
+					must_flush = 1;
+					break;
+				}
+			}
+		}
+	}
+	else if (f->_IO_write_end > f->_IO_write_ptr)
+		count = f->_IO_write_end - f->_IO_write_ptr; /* Space available. */
+
+	/* Then fill the buffer. */
+	if (count > 0)
+	{
+		if (count > to_do)
+			count = to_do;
+		#ifdef _LIBC
+			f->_IO_write_ptr = __mempcpy (f->_IO_write_ptr, s, count);
+		#else
+			memcpy (f->_IO_write_ptr, s, count);
+			f->_IO_write_ptr += count;
+		#endif
+		s += count;
+		to_do -= count;
+	}
+	if (to_do + must_flush > 0)
+	{
+		_IO_size_t block_size, do_write;
+		/* Next flush the (full) buffer. */
+		if (<a href = "#9">_IO_OVERFLOW (f, EOF)</a> == EOF)
+		/* If nothing else has to be written we must not signal the caller that everything has been written.  */
+			return to_do == 0 ? EOF : n - to_do;
+		
+		/* Try to maintain alignment: write a whole number of blocks.  */
+		block_size = f->_IO_buf_end - f->_IO_buf_base;
+		do_write = to_do - (block_size >= 128 ? to_do % block_size : 0);
+
+		if (do_write)
+		{
+			count = new_do_write (f, s, do_write);
+			to_do -= count;
+			if (count < do_write)
+				return n - to_do;
+		}
+
+		/* Now write out the remainder.  Normally, this will fit in the
+		buffer, but it's somewhat messier for line-buffered files,
+		so we let _IO_default_xsputn handle the general case. */
+		if (to_do)
+			to_do -= _IO_default_xsputn (f, s+do_write, to_do);
+	}
+	return n - to_do;
+}
+libc_hidden_ver (_IO_new_file_xsputn, _IO_file_xsputn)
+</pre>
 # 4. fclose #
 **注：调用vtable列表中的\_\_finish函数指针**
 <pre class="prettyprint lang-javascript"> 

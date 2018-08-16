@@ -122,20 +122,25 @@ struct _IO_FILE_complete
 </pre>
 其中有如下几个关键字段与文本所要讲述的内容密切相关。
 <pre class = "prettyprint lang-javascript">
-1.
+1. read buf
 char* _IO_read_ptr;		//指向"读缓冲区"中下一个要读入的数据的位置
 char* _IO_read_end;		//指向"读缓冲区"末尾
 char* _IO_read_base;		//指向"读缓冲区"
 _IO_read_end - _IO_read_base	//读缓冲区的长度
-2.
+2. write buf
 char* _IO_write_base;		//指向"写缓冲区"
 char* _IO_write_ptr;		//指向"写缓冲区"中下一个要写入的数据的位置
 char* _IO_write_end;		//指向"写缓冲区"末尾
-3.
+3. buf 
 char* _IO_buf_base;		//指向"缓冲区"
 char* _IO_buf_end;		//指向"缓冲区"末尾
+4. backup buf
+char * _IO_save_base;		//指向非当前获取区域的开始
+char * _IO_backup_base;		//指向备份区域的第一个有效字符
+char * _IO_save_end;		//指向非当前获取区域结束的指针
+
 </pre>
-其中\_IO\_read\_base，\_IO\_write\_base，\_IO\_buf\_base都指向了同一缓冲区
+其中\_IO\_read\_base，\_IO\_write\_base，\_IO\_buf\_base都指向了同一缓冲区。  
 ## 2.2 \_IO\_jump\_t vtable结构体（vtable） ##
 <pre class = "prettyprint lang-javascript">
 struct _IO_jump_t
