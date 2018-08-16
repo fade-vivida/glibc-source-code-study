@@ -245,9 +245,11 @@ _IO_size_t _IO_fread (void *buf, _IO_size_t size, _IO_size_t count, _IO_FILE *fp
 
 # define COERCE_FILE(FILE) /* Nothing */
 </pre>
+
 <a name = "5">
 ## 2.2 \_IO\_sgetn函数 ##
 </a>
+
 可以看到该函数只是单纯的调用了\_IO\_XSGETN宏。
 <pre class="prettyprint lang-javascript"> 
 _IO_size_t
@@ -450,10 +452,12 @@ _IO_file_xsgetn (_IO_FILE *fp, void *data, _IO_size_t n)
 }
 libc_hidden_def (_IO_file_xsgetn)
 </pre>
+<a name = "8">
 ## 2.5 \_IO\_switch\_to\_main\_get函数 ##
+</a>
 \_IO\_switch\_to\_main\_get\_area函数定义如下：
 <pre class = "prettyprint lang-javascript">
-<a name = "8">void _IO_switch_to_main_get_area (_IO_FILE *fp)</a>
+void _IO_switch_to_main_get_area (_IO_FILE *fp)
 {
 	char *tmp;
 	fp->_flags &= ~_IO_IN_BACKUP;
