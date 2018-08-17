@@ -493,13 +493,13 @@ int _IO_new_file_underflow (_IO_FILE *fp)
 	#endif
 	if (fp->_flags & _IO_NO_READS)
 	{
-		//文件流标志为不可读
+		//文件流标志为不可读，则直接返回EOF
 		fp->_flags |= _IO_ERR_SEEN;
 		__set_errno (EBADF);
 		return EOF;
 	}
 	if (fp->_IO_read_ptr < fp->_IO_read_end)
-		return *(unsigned char *) fp->_IO_read_ptr;		//如果fp->_IO_read_ptr < fp->_IO_read_end表示流缓存还有空间，可以继续读。
+		return *(unsigned char *) fp->_IO_read_ptr;		//如果fp->_IO_read_ptr < fp->_IO_read_end表示流缓存还有数据为读，不用调用SYS_READ。
 	
 	if (fp->_IO_buf_base == NULL)
 	{
@@ -534,7 +534,7 @@ int _IO_new_file_underflow (_IO_FILE *fp)
 		#endif
 	}
 	
-	_IO_switch_to_get_mode (fp);
+	<a href = "#10">_IO_switch_to_get_mode (fp);</a>
 	
 	/* This is very tricky. We have to adjust those
 	pointers before we call _IO_SYSREAD () since
@@ -616,6 +616,9 @@ libc_hidden_def (_IO_setb)
 可以看到该函数功能为：重新为fp文件流分配一个buff缓冲区。
 <a name = "9"></a>
 ## 2.8 \_IO\_new\_file\_overflow函数 ##
+该函数功能为：对当前文件流的写缓存进行刷新。具体逻辑流程如下所示：  
+1. 如果当前文件流不可写（\_IO\_NO\_WRITES 0x2），直接返回EOF  
+2. 如果当前文件流为读模式或者写缓冲为空，  
 <pre class = "prettyprint lang-javascript">
 _IO_new_file_overflow (_IO_FILE *f, int ch)
 {
@@ -673,6 +676,31 @@ _IO_new_file_overflow (_IO_FILE *f, int ch)
 	return (unsigned char) ch;
 }
 libc_hidden_ver (_IO_new_file_overflow, _IO_file_overflow)
+</pre>
+
+<a name = "#10"></a>
+## 2.9 \_IO\_switch\_to\_get\_mode函数 ##
+该函数功能为：将当前文件流由写模式（put mode）转化为读模式（get mode）。
+<pre class = "prettyprint lang-javascript">
+int _IO_switch_to_get_mode (_IO_FILE *fp)
+{
+	if (fp->_IO_write_ptr > fp->_IO_write_base)
+		if (<a href = "#9">_IO_OVERFLOW (fp, EOF)</a> == EOF)
+			return EOF;
+	if (_IO_in_backup (fp))
+		fp->_IO_read_base = fp->_IO_backup_base;
+	else
+	{
+		fp->_IO_read_base = fp->_IO_buf_base;
+		if (fp->_IO_write_ptr > fp->_IO_read_end)
+			fp->_IO_read_end = fp->_IO_write_ptr;
+	}
+	fp->_IO_read_ptr = fp->_IO_write_ptr;
+	fp->_IO_write_base = fp->_IO_write_ptr = fp->_IO_write_end = fp->_IO_read_ptr;
+	fp->_flags &= ~_IO_CURRENTLY_PUTTING;
+	return 0;
+}
+libc_hidden_def (_IO_switch_to_get_mode)
 </pre>
 # 3. fwrite #
 **注：最终调用vtable中的\_\_xsputn**
