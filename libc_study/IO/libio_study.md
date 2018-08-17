@@ -399,7 +399,9 @@ _IO_file_xsgetn (_IO_FILE *fp, void *data, _IO_size_t n)
 			/* Check for backup and repeat */
 			if (_IO_in_backup (fp))
 			{
-				//如果当前文件流设置有备份标志位0x100，则转换当前文件流缓冲区，继续进行读写操作。
+				//如果当前文件流设置有备份标志位0x100，则交换
+					_IO_read_base<-->_IO_save_base
+					_IO_read_end<-->_IO_save_end
 				<a href = "#8">_IO_switch_to_main_get_area (fp);</a>
 				continue;
 			}
@@ -474,7 +476,9 @@ void _IO_switch_to_main_get_area (_IO_FILE *fp)
 	fp->_IO_read_ptr = fp->_IO_read_base;
 }
 </pre>
-该函数的主要功能为：如果当前文件流标志位定义了备份缓存（fp->flag & _IO_IN_BACKUP == 0x100），则将\_IO\_read\_base，\_IO\_read\_ptr，\_IO\_read\_end指向该缓存。
+该函数的主要功能为：如果当前文件流标志位为备份缓存（fp->flag & _IO_IN_BACKUP == 0x100），则将\_IO\_read\_base，\_IO\_read\_ptr，\_IO\_read\_end与\_IO\_save\_base，\_IO\_save\_end进行交换。  
+
+也就是说当前文件流有两个缓存区，一个是主缓存，一个是备份缓存，该标志位的作用就是表明当前是处于哪个缓存空间。
 <a name = "9"></a>
 ## 2.6 \_IO\_new\_file\_underflow函数 ##
 该函数为vtable->\_\_underflow hook的功能函数，其函数代码如下所示：
