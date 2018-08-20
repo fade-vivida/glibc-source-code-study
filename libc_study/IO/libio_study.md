@@ -516,6 +516,7 @@ int _IO_new_file_underflow (_IO_FILE *fp)
 	/* FIXME This can/should be moved to genops ?? */
 	if (fp->_flags & (_IO_LINE_BUF|_IO_UNBUFFERED))
 	{
+		//根据源代码注释，该段代码只是为了兼容之前Unix对stdout所做的操作（flush stdout），其他并无实际作用。
 		#if 0
 			_IO_flush_all_linebuffered ();
 		#else
@@ -567,7 +568,7 @@ int _IO_new_file_underflow (_IO_FILE *fp)
 }
 libc_hidden_ver (_IO_new_file_underflow, _IO_file_underflow)
 </pre>
-
+从函数源码分析可知，该函数的主要功能为在read buff中的数据都被读完时（\_IO\_read\_ptr == \_IO\_read\_end），
 
 <a name = "7"></a>
 ## 2.7 \_IO\_doallocbuf ##
@@ -614,72 +615,9 @@ void _IO_setb (_IO_FILE *f, char *b, char *eb, int a)
 libc_hidden_def (_IO_setb)
 </pre>
 可以看到该函数功能为：重新为fp文件流分配一个buff缓冲区。
-<a name = "9"></a>
-## 2.8 \_IO\_new\_file\_overflow函数 ##
-该函数功能为：对当前文件流的写缓存进行刷新。具体逻辑流程如下所示：  
-1. 如果当前文件流不可写（\_IO\_NO\_WRITES 0x2），直接返回EOF  
-2. 如果当前文件流为读模式或者写缓冲为空，  
-<pre class = "prettyprint lang-javascript">
-_IO_new_file_overflow (_IO_FILE *f, int ch)
-{
-	if (f->_flags & _IO_NO_WRITES) /* SET ERROR */
-	{
-		f->_flags |= _IO_ERR_SEEN;
-		__set_errno (EBADF);
-		return EOF;
-	}
-	/* If currently reading or no buffer allocated. */
-	if ((f->_flags & _IO_CURRENTLY_PUTTING) == 0 || f->_IO_write_base == NULL)
-	{
-		/* Allocate a buffer if needed. */
-		if (f->_IO_write_base == NULL)
-		{
-			_IO_doallocbuf (f);
-			_IO_setg (f, f->_IO_buf_base, f->_IO_buf_base, f->_IO_buf_base);
-		}
-		/* Otherwise must be currently reading.
-		If _IO_read_ptr (and hence also _IO_read_end) is at the buffer end,
-		logically slide the buffer forwards one block (by setting the
-		read pointers to all point at the beginning of the block).  This
-		makes room for subsequent output.
-		Otherwise, set the read pointers to _IO_read_end (leaving that
-		alone, so it can continue to correspond to the external position). */
-		if (__glibc_unlikely (_IO_in_backup (f)))
-		{
-			//如果f设置了备份缓存，则替换该备份缓存区为主缓存区
-			size_t nbackup = f->_IO_read_end - f->_IO_read_ptr;
-			_IO_free_backup_area (f);
-			f->_IO_read_base -= MIN (nbackup,f->_IO_read_base - f->_IO_buf_base);
-			f->_IO_read_ptr = f->_IO_read_base;
-		}
-	
-		if (f->_IO_read_ptr == f->_IO_buf_end)
-			f->_IO_read_end = f->_IO_read_ptr = f->_IO_buf_base;
-		f->_IO_write_ptr = f->_IO_read_ptr;
-		f->_IO_write_base = f->_IO_write_ptr;
-		f->_IO_write_end = f->_IO_buf_end;
-		f->_IO_read_base = f->_IO_read_ptr = f->_IO_read_end;
-
-		f->_flags |= _IO_CURRENTLY_PUTTING;
-		if (f->_mode <= 0 && f->_flags & (_IO_LINE_BUF | _IO_UNBUFFERED))
-			f->_IO_write_end = f->_IO_write_ptr;
-	}
-	if (ch == EOF)
-		return _IO_do_write (f, f->_IO_write_base,f->_IO_write_ptr - f->_IO_write_base);
-	if (f->_IO_write_ptr == f->_IO_buf_end ) /* Buffer is really full */
-		if (_IO_do_flush (f) == EOF)
-			return EOF;
-	*f->_IO_write_ptr++ = ch;
-	if ((f->_flags & _IO_UNBUFFERED) || ((f->_flags & _IO_LINE_BUF) && ch == '\n'))
-		if (_IO_do_write (f, f->_IO_write_base,f->_IO_write_ptr - f->_IO_write_base) == EOF)
-		return EOF;
-	return (unsigned char) ch;
-}
-libc_hidden_ver (_IO_new_file_overflow, _IO_file_overflow)
-</pre>
 
 <a name = "#10"></a>
-## 2.9 \_IO\_switch\_to\_get\_mode函数 ##
+## 2.8 \_IO\_switch\_to\_get\_mode函数 ##
 该函数功能为：将当前文件流由写模式（put mode）转化为读模式（get mode）。
 <pre class = "prettyprint lang-javascript">
 int _IO_switch_to_get_mode (_IO_FILE *fp)
@@ -810,6 +748,100 @@ _IO_size_t _IO_new_file_xsputn (_IO_FILE *f, const void *data, _IO_size_t n)
 }
 libc_hidden_ver (_IO_new_file_xsputn, _IO_file_xsputn)
 </pre>
+
+<a name = "9"></a>
+## 3.2 \_IO\_new\_file\_overflow函数 ##
+该函数功能为：对当前文件流的写缓存进行刷新。具体逻辑流程如下所示：  
+1. 如果当前文件流不可写（\_IO\_NO\_WRITES 0x2），直接返回EOF  
+2. 如果当前文件流为读模式或者写缓冲为空，则分配新的流缓冲区并调整read buff的位置  
+<pre class = "prettyprint lang-javascript">
+_IO_new_file_overflow (_IO_FILE *f, int ch)
+{
+	if (f->_flags & _IO_NO_WRITES) /* SET ERROR */
+	{
+		f->_flags |= _IO_ERR_SEEN;
+		__set_errno (EBADF);
+		return EOF;
+	}
+	/* If currently reading or no buffer allocated. */
+	if ((f->_flags & _IO_CURRENTLY_PUTTING) == 0 || f->_IO_write_base == NULL)
+	{
+		/* Allocate a buffer if needed. */
+		if (f->_IO_write_base == NULL)
+		{
+			_IO_doallocbuf (f);
+			_IO_setg (f, f->_IO_buf_base, f->_IO_buf_base, f->_IO_buf_base);
+		}
+		/* Otherwise must be currently reading.
+		If _IO_read_ptr (and hence also _IO_read_end) is at the buffer end,
+		logically slide the buffer forwards one block (by setting the
+		read pointers to all point at the beginning of the block).  This
+		makes room for subsequent output.
+		Otherwise, set the read pointers to _IO_read_end (leaving that
+		alone, so it can continue to correspond to the external position). */
+		if (__glibc_unlikely (_IO_in_backup (f)))
+		{
+			//如果f设置了备份缓存，则替换该备份缓存区为主缓存区，并滑动读入缓冲区为写缓冲空出位置
+			size_t nbackup = f->_IO_read_end - f->_IO_read_ptr;
+			_IO_free_backup_area (f);
+			f->_IO_read_base -= MIN (nbackup,f->_IO_read_base - f->_IO_buf_base);
+			f->_IO_read_ptr = f->_IO_read_base;
+		}
+	
+		if (f->_IO_read_ptr == f->_IO_buf_end)
+			f->_IO_read_end = f->_IO_read_ptr = f->_IO_buf_base;
+		f->_IO_write_ptr = f->_IO_read_ptr;
+		f->_IO_write_base = f->_IO_write_ptr;
+		f->_IO_write_end = f->_IO_buf_end;
+		f->_IO_read_base = f->_IO_read_ptr = f->_IO_read_end;
+		
+		f->_flags |= _IO_CURRENTLY_PUTTING;
+		if (f->_mode <= 0 && f->_flags & (_IO_LINE_BUF | _IO_UNBUFFERED))
+			f->_IO_write_end = f->_IO_write_ptr;
+	}
+	if (ch == EOF)
+		return <a href = "#11">_IO_do_write (f, f->_IO_write_base,f->_IO_write_ptr - f->_IO_write_base);</a>
+	if (f->_IO_write_ptr == f->_IO_buf_end ) /* Buffer is really full */
+		if (_IO_do_flush (f) == EOF)
+			return EOF;
+	*f->_IO_write_ptr++ = ch;
+	if ((f->_flags & _IO_UNBUFFERED) || ((f->_flags & _IO_LINE_BUF) && ch == '\n'))
+		if (_IO_do_write (f, f->_IO_write_base,f->_IO_write_ptr - f->_IO_write_base) == EOF)
+		return EOF;
+	return (unsigned char) ch;
+}
+libc_hidden_ver (_IO_new_file_overflow, _IO_file_overflow)
+</pre>
+<a name = "11"></a>
+## 3.3 new\_do\_write ##
+该函数为\_IO\_do\_write函数的功能实现函数。
+<pre class = "prettyprint lang-javascript">
+static _IO_size_t new_do_write (_IO_FILE *fp, const char *data, _IO_size_t to_do)
+{
+	_IO_size_t count;
+	if (fp->_flags & _IO_IS_APPENDING)
+		/* On a system without a proper O_APPEND implementation, you would need to sys_seek(0, SEEK_END) here, but is not needed nor desirable for Unix- or Posix-like systems.Instead, just indicate that offset (before and after) is unpredictable. */
+		fp->_offset = _IO_pos_BAD;
+	else if (fp->_IO_read_end != fp->_IO_write_base)
+	{
+		//要想绕过该判断，则fp->_IO_read_end == fp->_IO_write_base
+		_IO_off64_t new_pos = _IO_SYSSEEK (fp, fp->_IO_write_base - fp->_IO_read_end, 1);
+		if (new_pos == _IO_pos_BAD)
+			return 0;
+		fp->_offset = new_pos;
+	}
+	count = _IO_SYSWRITE (fp, data, to_do);
+	if (fp->_cur_column && count)
+		fp->_cur_column = _IO_adjust_column (fp->_cur_column - 1, data, count) + 1;
+	_IO_setg (fp, fp->_IO_buf_base, fp->_IO_buf_base, fp->_IO_buf_base);
+	fp->_IO_write_base = fp->_IO_write_ptr = fp->_IO_buf_base;
+	fp->_IO_write_end = (fp->_mode <= 0
+		       && (fp->_flags & (_IO_LINE_BUF | _IO_UNBUFFERED))
+		       ? fp->_IO_buf_base : fp->_IO_buf_end);
+	return count;
+}
+</pre>
+从源代码中可以看到，当完成将数据写回设备后，如果文件流为行缓冲或者无缓冲，则初始化文件流\_IO\_write\_end为\_IO\_buf\_base。否则，初始化文件流\_IO\_write\_end为\_IO\_buf\_end。
 # 4. fclose #
 **注：调用vtable列表中的\_\_finish函数指针**
 <pre class="prettyprint lang-javascript"> 
@@ -935,7 +967,7 @@ int _IO_flush_all_lockp (int do_lock)
 5. fp -> \_wide\_data -> \_IO\_write\_ptr > fp -> \_wide\_data -> \_IO\_write\_base  
 **注：这5个条件中1、2必须同时成立，或者3、4、5必须同时成立。**  
 
-fp -> \_mode 字段是用来判断当前文件流指针是否使用了宽字节数据，fp -> \_mode < 0 表示未使用，因此接下来只需要判断\_IO\_write\_ptr 是否大于\_IO\_write\_base（是否还有数据没有写入）。如果fp -> \_mode >= 0 表示使用了宽字节数据，此时需要检查是\_wide\_data结构体中是否还有未写入的数据，并且fp -> \_vtable\_offset字段必须为0。
+fp -> \_mode 字段是用来判断当前文件流指针是否使用了宽字节数据，fp -> \_mode < 0 表示使用字节流模式，因此接下来只需要判断\_IO\_write\_ptr 是否大于\_IO\_write\_base（是否还有数据没有写入）。如果fp -> \_mode >= 0 表示使用了宽字节流模式（或者当前模式未指定），此时需要检查是\_wide\_data结构体中是否还有未写入的数据，并且fp -> \_vtable\_offset字段必须为0。
 ## 5.2 基于finish的FSOP利用技术 ##
 该利用方法其实就是利用了在关闭文件流指针时（调用\_IO\_new\_fclose），最终会调用vtable函数列表中\_\_finish函数这一特性，具体源代码在章节4，这里不再赘述。
 ## 5.3 FSOP防御机制 ##
@@ -956,6 +988,7 @@ IO_validate_vtable (const struct _IO_jump_t *vtable)
 </pre>
 其中IO\_validate\_vtable函数主要检查当前vtable是否在正常范围内（\_\_libc\_IO\_vtables section，该节的属性为只读）。如果不在则调用\_IO\_vtable\_check函数进行更为细致的检查。  
 
+\_IO\_vtable\_check函数源代码如下所示：
 <pre class="prettyprint lang-javascript"> 
 void attribute_hidden
 _IO_vtable_check (void)
@@ -964,7 +997,7 @@ _IO_vtable_check (void)
   	/* Honor the compatibility flag.  */
   	void (*flag) (void) = atomic_load_relaxed (&IO_accept_foreign_vtables);
 	#ifdef PTR_DEMANGLE
-  	PTR_DEMANGLE (flag);
+  	PTR_DEMANGLE (flag);		//该宏定义的功能为：对指针进行保护，具体做法为与线程保护值相异或，原理类似stack canny
 	#endif
   	if (flag == &_IO_vtable_check)
 		return;
@@ -992,8 +1025,12 @@ _IO_vtable_check (void)
 }
 </pre>
 
-大体意思为：如果定义了SHARED，则需要检查是否设定了接受外来vtables。如果是则直接返回，除此之外还会检查是否设置了\_dl\_open\_hook结构体，或者该libc副本不在缺省的命名空间内。绕过机制相对负责
-## 5.4  ##
+该函数大体意思为：如果定义了SHARED，则需要检查是否设定了接受外来vtables。如果是则直接返回，除此之外还会检查是否设置了\_dl\_open\_hook结构体，或者该libc副本不在缺省的命名空间内。  
+
+由此可以想到两种绕过方法：
+1. 修改IO\_accept\_foreign\_vtables全局变量
+## 5.4 绕过 ##
+## 5.5  ##
 <pre class="prettyprint lang-javascript">
 int _IO_str_overflow (_IO_FILE *fp, int c)
 {
