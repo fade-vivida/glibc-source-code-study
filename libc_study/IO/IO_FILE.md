@@ -141,6 +141,39 @@ char * _IO_save_end;		//指向非当前获取区域结束的指针
 
 </pre>
 其中\_IO\_read\_base，\_IO\_write\_base，\_IO\_buf\_base都指向了同一缓冲区。  
+
+附上64bit模式下各字段的偏移：
+
+    0x0   _flags
+    0x8   _IO_read_ptr
+    0x10  _IO_read_end
+    0x18  _IO_read_base
+    0x20  _IO_write_base
+    0x28  _IO_write_ptr
+    0x30  _IO_write_end
+    0x38  _IO_buf_base
+    0x40  _IO_buf_end
+    0x48  _IO_save_base
+    0x50  _IO_backup_base
+    0x58  _IO_save_end
+    0x60  _markers
+    0x68  _chain
+    0x70  _fileno
+    0x74  _flags2
+    0x78  _old_offset
+    0x80  _cur_column
+    0x82  _vtable_offset
+    0x83  _shortbuf
+    0x88  _lock
+    0x90  _offset
+    0x98  _codecvt
+    0xa0  _wide_data
+    0xa8  _freeres_list
+    0xb0  _freeres_buf
+    0xb8  __pad5
+    0xc0  _mode
+    0xc4  _unused2
+    0xd8  vtable
 ## 2.2 \_IO\_jump\_t vtable结构体（vtable） ##
 <pre class = "prettyprint lang-javascript">
 struct _IO_jump_t

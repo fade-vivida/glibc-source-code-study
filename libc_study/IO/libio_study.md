@@ -1011,7 +1011,7 @@ fp -> \_mode 字段是用来判断当前文件流指针是否使用了宽字节�
 
 由于此时\_IO\_list\_all = &main\_arena->topchunk，因此chain字段的地址就为 &main\_arena->topchunk + 0x68（64bit，32位下+0x34），也就是落到了bin[5]（64bit下为smallbin 0x60，32位下为smallbin 0x30）链表范围内。这样如果我们能伪造一个在该范围内的chunk并free它（要确保其落入smallbin，而不是待在unsortedbin中），就可以成功触发漏洞。
 
-一个代码实例如下所示：
+一个代码实例如下所示（pwnable.tw BookWriter）：
 
 	fake_bk = io_list_all - 0x10
 	fake_fd = top_addr
