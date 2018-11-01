@@ -328,9 +328,10 @@ MIN\_CHUNK\_SIZE定义为：
     } 
 函数功能大体分析如下：  
 1. 检查该chunk所在的arena是否与之前传入函数的av相等。**（注意点：使用fastbin attack攻击时，在构造伪chunk时，其size字段的IS_MAPPED(0x2)必须为1，这样才能绕过对于arean的检查）**  
-2. 调用do\_check\_inuse\_chunk(av,p)，在do\_check\_inuse\_chunk()函数中，还会调用do\_check\_chunk()函数首先对victim块进行相关检查，然后检查下一个chunk的PRE\_INUSE是否置1（fastbin不合并，因此与其相邻的下一个chunk的PRE\_INUSE字段永远为1）；并检查当前chunk的相邻chunk是否处于free状态，如果是，调用do\_check\_free\_chunk对其进行检查。  
+2. 调用do\_check\_inuse\_chunk(av,p)，在do\_check\_inuse\_chunk()函数中，还会调用do\_check\_chunk()函数首先对victim块进行相关检查，然后检查下一个chunk的PRE\_INUSE是否置1（fastbin不合并，因此与其相邻的下一个chunk的PRE\_INUSE字段永远为1）；并检查当前chunk的相邻chunk是否处于free状态，如果是，调用do\_check\_free\_chunk对其进行检查。**（注：当fastbin的IS\_MAPPED被置位时，不进行2上述检查，直接返回）**  
 3. 对申请chunk的大小进行检查，对victim的地址进行对齐检查。
 
+**注：综上所述，伪造fastbin时，其size字段的IS\_MAPPED最好置1，这样可以绕过很多检查**  
 对取下的victim chunk进行检查后，是一些关于TCACHE机制的使用方法，具体会在之后的文章中进行分析。
 
 	#if USE_TCACHE
