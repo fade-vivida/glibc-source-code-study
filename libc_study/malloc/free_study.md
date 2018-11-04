@@ -202,141 +202,144 @@ if ((unsigned long)(size) <= (unsigned long)(get_max_fast ())\
 
 ## 3. 放入unsortedbin链表 ##
 ### 3.1 待释放chunk不是通过mmap分配的 ###
-
-	/*Consolidate other non-mmapped chunks as they arrive.*/
-	else if (!chunk_is_mmapped(p)) 
-	{
-		/* If we're single-threaded, don't lock the arena.  */
-    	if (SINGLE_THREAD_P)
-      		have_lock = true;
-		if (!have_lock)
-      		__libc_lock_lock (av->mutex);
-		nextchunk = chunk_at_offset(p, size);
-		/* Lightweight tests: check whether the block is already the top block.  */
-		if (__glibc_unlikely (p == av->top))
-			malloc_printerr ("double free or corruption (top)");
-		/* Or whether the next chunk is beyond the boundaries of the arena.  */
-		if (__builtin_expect (contiguous (av) && (char *) nextchunk 
-			>= ((char *) av->top + chunksize(av->top)), 0))
-			malloc_printerr ("double free or corruption (out)");
-		/* Or whether the block is actually not marked used.  */
-		if (__glibc_unlikely (!prev_inuse(nextchunk)))
-			malloc_printerr ("double free or corruption (!prev)");
+<pre class="prettyprint lang-javascript"> 
+/*Consolidate other non-mmapped chunks as they arrive.*/
+else if (!chunk_is_mmapped(p)) 
+{
+	/* If we're single-threaded, don't lock the arena.  */
+	if (SINGLE_THREAD_P)
+  		have_lock = true;
+	if (!have_lock)
+  		__libc_lock_lock (av->mutex);
+	nextchunk = chunk_at_offset(p, size);
+	/* Lightweight tests: check whether the block is already the top block.  */
+	if (__glibc_unlikely (p == av->top))
+		malloc_printerr ("double free or corruption (top)");
+	/* Or whether the next chunk is beyond the boundaries of the arena.  */
+	if (__builtin_expect (contiguous (av) && (char *) nextchunk 
+		>= ((char *) av->top + chunksize(av->top)), 0))
+		malloc_printerr ("double free or corruption (out)");
+	/* Or whether the block is actually not marked used.  */
+	if (__glibc_unlikely (!prev_inuse(nextchunk)))
+		malloc_printerr ("double free or corruption (!prev)");
+	nextsize = chunksize(nextchunk);
+	if (__builtin_expect (chunksize_nomask (nextchunk) <= 2 * SIZE_SZ, 0) || __builtin_expect (nextsize >= av->system_mem, 0))
+		malloc_printerr ("free(): invalid next size (normal)");
+</pre>
 再次进行一些轻量级的测试，主要测试内容有以下3个方面：  
 test 1：当前释放的chunk p是否为top chunk  
-test 2：next chunk是否超出了arena范围  
-test 3：再次检查当前chunk是否为inuse
+test 2：next chunk是否超出了aren中规定的chunk范围  
+test 3：再次检查当前chunk是否为inuse  
+test 4：next chunk的size字段必须大于 2*SIZE\_SZ 且小于 av->system\_mem（av->sytem\_mem就是heap段的大小）
+<pre class="prettyprint lang-javascript">
+	free_perturb (chunk2mem(p), size - 2 * SIZE_SZ);		//进行字段填充
 
-		nextsize = chunksize(nextchunk);
-    	if (__builtin_expect (chunksize_nomask (nextchunk) <= 2 * SIZE_SZ, 0)
-			|| __builtin_expect (nextsize >= av->system_mem, 0))
-      		malloc_printerr ("free(): invalid next size (normal)");
-next chunk的size字段必须大于2*SIZE\_SZ且小于av->system\_mem（av->sytem\_mem就是heap段的大小）
-
-		free_perturb (chunk2mem(p), size - 2 * SIZE_SZ);		//进行字段填充
-
-		/* consolidate backward */
-    	if (!prev_inuse(p)) 
-		{
-  			prevsize = prev_size (p);
-  			size += prevsize;
-  			p = chunk_at_offset(p, -((long) prevsize));
-  			unlink(av, p, bck, fwd);
-		}
-如果pre chunk处于free状态，则前向合并（unlink操作）。
-
-		if (nextchunk != av->top) 
-		{
-			/* get and clear inuse bit */
-      		nextinuse = inuse_bit_at_offset(nextchunk, nextsize);
-			
-			/* consolidate forward */
-      		if (!nextinuse) 
-			{
-				unlink(av, nextchunk, bck, fwd);
-				size += nextsize;
-      		} 
-			else
-				clear_inuse_bit_at_offset(nextchunk, 0);
-如果next chunk不为top chunk且处于free状态，则后向合并。否则修改next chunk的preinuse字段为0，标志当前chunk已被释放。
-
-			/*
-			Place the chunk in unsorted chunk list. Chunks are not placed into regular bins until after they 
-			have been given one chance to be used in malloc.
-      		*/
-			bck = unsorted_chunks(av);
-      		fwd = bck->fd;
-      		if (__glibc_unlikely (fwd->bk != bck))
-				malloc_printerr ("free(): corrupted unsorted chunks");
-      		p->fd = fwd;
-      		p->bk = bck;
-      		if (!in_smallbin_range(size))
-			{
-	  			p->fd_nextsize = NULL;
-	  			p->bk_nextsize = NULL;
-				//largebin chunk有相应的fd_nextsize和bk_nextsize字段，需要将其清0
-			}
-      		bck->fd = p;
-      		fwd->bk = p;
-		
-			set_head(p, size | PREV_INUSE);		//设置chunk p的PREV_INUSE字段为1
-      		set_foot(p, size);		//设置next chunk的presize字段为当前chunk p的size
-      		check_free_chunk(av, p);
-		}
-然后将chunk p加入unsortedbin链表中，并修改当前unsortedbin链表指针及chunk p相应链表指针，设置chunk p相应字段值，然后调用check\_free\_chunk()对chunk p进行检查。
-
-    	/*If the chunk borders the current high end of memory,consolidate into top*/
-    	else 
-		{
-			size += nextsize;
-      		set_head(p, size | PREV_INUSE);
-      		av->top = p;
-      		check_chunk(av, p);
-    	}
-如果next chunk为top chunk，则将其合并到top chunk中。
-
-    	/*
-		If freeing a large space, consolidate possibly-surrounding
-		chunks. Then, if the total unused topmost memory exceeds trim
-		threshold, ask malloc_trim to reduce top.
-		
-		Unless max_fast is 0, we don't know if there are fastbins
-		bordering top, so we cannot tell for sure whether threshold
-		has been reached unless fastbins are consolidated.  But we
-		don't want to consolidate on each free.  As a compromise,
-		consolidation is performed if FASTBIN_CONSOLIDATION_THRESHOLD
-		is reached.
-		*/
-	
-		if ((unsigned long)(size) >= FASTBIN_CONSOLIDATION_THRESHOLD) 
-		{
-			if (atomic_load_relaxed (&av->have_fastchunks))
-				malloc_consolidate(av);
-			if (av == &main_arena) 
-			{
-				#ifndef MORECORE_CANNOT_TRIM
-				if ((unsigned long)(chunksize(av->top)) >= (unsigned long)(mp_.trim_threshold))
-					systrim(mp_.top_pad, av);
-				#endif
-	      	} 
-			else 
-			{
-				/* Always try heap_trim(), even if the top chunk is not
-				large, because the corresponding heap might go away.  */
-				heap_info *heap = heap_for_ptr(top(av));
-
-				assert(heap->ar_ptr == av);
-				heap_trim(heap, mp_.top_pad);
-	      	}
-		}
-		if (!have_lock)
-	      __libc_lock_unlock (av->mutex);
+	/* consolidate backward */		//如果pre chunk处于free状态，则前向合并（unlink操作）。
+	if (!prev_inuse(p)) 
+	{
+		prevsize = prev_size (p);
+		size += prevsize;
+		p = chunk_at_offset(p, -((long) prevsize));
+		unlink(av, p, bck, fwd);
 	}
-	/*If the chunk was allocated via mmap, release via munmap().*/
+	if (nextchunk != av->top)
+	{
+		/* get and clear inuse bit */
+		nextinuse = inuse_bit_at_offset(nextchunk, nextsize);
+		/* consolidate forward */
+		if (!nextinuse)
+		{
+			unlink(av, nextchunk, bck, fwd);
+			size += nextsize;
+		}
+		else
+			clear_inuse_bit_at_offset(nextchunk, 0);
+		/* 如果next chunk不为top chunk且处于free状态，则后向合并。否则修改next chunk的preinuse字段为0，
+		标志当前chunk已被释放。*/
+		
+		/*
+		Place the chunk in unsorted chunk list. Chunks are not placed into regular bins until after they 
+		have been given one chance to be used in malloc.
+		*/
+		
+		bck = unsorted_chunks(av);
+		fwd = bck->fd;
+		if (__glibc_unlikely (fwd->bk != bck))
+			malloc_printerr ("free(): corrupted unsorted chunks");
+		p->fd = fwd;
+		p->bk = bck;
+		if (!in_smallbin_range(size))
+		{
+			p->fd_nextsize = NULL;
+			p->bk_nextsize = NULL;
+			//largebin chunk有相应的fd_nextsize和bk_nextsize字段，需要将其清0
+		}
+		bck->fd = p;
+		fwd->bk = p;
+		set_head(p, size | PREV_INUSE);		//设置chunk p的PREV_INUSE字段为1
+		set_foot(p, size);		//设置next chunk的presize字段为当前chunk p的size
+		check_free_chunk(av, p);
+		/*
+		然后将chunk p加入unsortedbin链表中，并修改当前unsortedbin链表指针及chunk p相应链表指针，
+		设置chunk p相应字段值，然后调用check_free_chunk()对chunk p进行检查。
+		*/
+	}
+	/*If the chunk borders the current high end of memory,consolidate into top*/
+	else
+	{
+		//如果next chunk是top chunk，就将chunk直接并入即可
+		size += nextsize;
+		set_head(p, size | PREV_INUSE);
+		av->top = p;
+		check_chunk(av, p);
+	}
+</pre>
+**注：这里需要注意的一个点是：unsortedbin是先入先出的，即最先放入的chunk会被最先遍历到**  
+<pre class="prettyprint lang-javascript">
+	/*
+	If freeing a large space, consolidate possibly-surrounding
+	chunks. Then, if the total unused topmost memory exceeds trim
+	threshold, ask malloc_trim to reduce top.
+	
+	Unless max_fast is 0, we don't know if there are fastbins
+	bordering top, so we cannot tell for sure whether threshold
+	has been reached unless fastbins are consolidated.  But we
+	don't want to consolidate on each free.  As a compromise,
+	consolidation is performed if FASTBIN_CONSOLIDATION_THRESHOLD
+	is reached.
+	*/
+	
+	if ((unsigned long)(size) >= FASTBIN_CONSOLIDATION_THRESHOLD)
+	{
+		if (atomic_load_relaxed (&av->have_fastchunks))
+			malloc_consolidate(av);
+		if (av == &main_arena)
+		{
+			#ifndef MORECORE_CANNOT_TRIM
+			if ((unsigned long)(chunksize(av->top)) >= (unsigned long)(mp_.trim_threshold))
+				systrim(mp_.top_pad, av);
+			#endif
+		}
+		else
+		{
+			/* Always try heap_trim(), even if the top chunk is not large, 
+			because the corresponding heap might go away.  */
+			heap_info *heap = heap_for_ptr(top(av));
+			assert(heap->ar_ptr == av);
+			heap_trim(heap, mp_.top_pad);
+		}
+	}
+	if (!have_lock)
+		__libc_lock_unlock (av->mutex);
+}
+</pre>
+
 如果释放了一个很大的chunk，导致当前某个空闲chunk的size大于一个阈值（FASTBIN\_CONSOLIDATION\_THRESHOLD=0x10000），则对当前fastbin中的chunk进行合并（调用malloc\_consolidate()函数），并对top chunk进行剪枝。  
 **注：一个重要的只是点，即释放一个大于0x10000的chunk时，能够导致fastbin链表中的chunk进行合并**
 ### 3.2 如果待释放chunk是通过mmap分配的 ###
 很简单，调用munmap\_chunk即可。
+<pre class="prettyprint lang-javascript">
+/*If the chunk was allocated via mmap, release via munmap().*/
 
 	else {
     	munmap_chunk (p);
@@ -374,3 +377,4 @@ next chunk的size字段必须大于2*SIZE\_SZ且小于av->system\_mem（av->syte
 	    terminate shortly anyway since not much can be done.  */
 	  	__munmap ((char *) block, total_size);
 	}	
+</pre>

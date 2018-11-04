@@ -372,54 +372,94 @@ alloc\_perturb()函数定义如下：
 至此，在\_int\_malloc()函数中fastbin部分的分析结束。
 
 ## 3.SmallBin分配机制 ##
+<pre class="prettyprint lang-javascript">
+#define NSMALLBINS 64
+#define SMALLBIN_WIDTHMALLOC_ALIGNMENT
+#define SMALLBIN_CORRECTION (MALLOC_ALIGNMENT > 2 * SIZE_SZ)
+#define MIN_LARGE_SIZE((NSMALLBINS - SMALLBIN_CORRECTION) * SMALLBIN_WIDTH)
+#define in_smallbin_range(sz) ((unsigned long) (sz) < (unsigned long) MIN_LARGE_SIZE)
 
-	#define NSMALLBINS 64
-    #define SMALLBIN_WIDTHMALLOC_ALIGNMENT
-    #define SMALLBIN_CORRECTION (MALLOC_ALIGNMENT > 2 * SIZE_SZ)
-    #define MIN_LARGE_SIZE((NSMALLBINS - SMALLBIN_CORRECTION) * SMALLBIN_WIDTH)
-    #define in_smallbin_range(sz) ((unsigned long) (sz) < (unsigned long) MIN_LARGE_SIZE)
 
-
-	if (in_smallbin_range (nb))
-    {	
-		idx = smallbin_index (nb);
-      	bin = bin_at (av, idx);
-    	if ((victim = last (bin)) != bin)
-    	{
-      		bck = victim->bk;
-    	  	if (__glibc_unlikely (bck->fd != victim))
-    			malloc_printerr ("malloc(): smallbin double linked list corrupted");
-      		set_inuse_bit_at_offset (victim, nb);
-      		bin->bk = bck;
-      		bck->fd = bin;
-    		if (av != &main_arena)
-    			set_non_main_arena (victim);
-      		check_malloced_chunk (av, victim, nb);
+if (in_smallbin_range (nb))
+{	
+	idx = smallbin_index (nb);
+  	bin = bin_at (av, idx);
+	if ((victim = last (bin)) != bin)
+	{
+		bck = victim->bk;
+		if (__glibc_unlikely (bck->fd != victim))
+			malloc_printerr ("malloc(): smallbin double linked list corrupted");
+		set_inuse_bit_at_offset (victim, nb);
+		bin->bk = bck;
+		bck->fd = bin;
+		if (av != &main_arena)
+			set_non_main_arena (victim);
+		check_malloced_chunk (av, victim, nb);
+		#if USE_TCACHE
+	  	/* While we're here, if we see other chunks of the same size, stash them in the tcache.  */
+		size_t tc_idx = csize2tidx (nb);
+		if (tcache && tc_idx < mp_.tcache_bins)
+		{
+			mchunkptr tc_victim;
+			/* While bin not empty and tcache not full, copy chunks over.  */
+			while (tcache->counts[tc_idx] < mp_.tcache_count && (tc_victim = last (bin)) != bin)
+			{
+				if (tc_victim != 0)
+				{
+					bck = tc_victim->bk;
+					set_inuse_bit_at_offset (tc_victim, nb);
+					if (av != &main_arena)
+						set_non_main_arena (tc_victim);
+					bin->bk = bck;
+					bck->fd = bin;
+					tcache_put (tc_victim, tc_idx);
+				}
+			}
+		}
+		#endif
+		void *p = chunk2mem (victim);
+		alloc_perturb (p, bytes);
+		return p;
+	}
+}
+</pre>
 ### 1.计算Smallbin数组索引 ###
-首先调用in\_smallbin\_range宏检查申请size是否在smallbin范围内。  
+首先调用in\_smallbin\_range宏检查申请size是否在smallbin范围内。 
+ 
 **注：重要结论！！！**    
 **64-bit: < 1024 byte，即最大的smallbin为1008（0x3f0）**  
 **32-bit: < 512  byte，即最大的smallbin为504（0x1f8）**  
 
-	#define NBINS             128
-	#define NSMALLBINS         64
-	#define SMALLBIN_WIDTH    MALLOC_ALIGNMENT
-	#define SMALLBIN_CORRECTION (MALLOC_ALIGNMENT > 2 * SIZE_SZ)
-	#define MIN_LARGE_SIZE    ((NSMALLBINS - SMALLBIN_CORRECTION) * SMALLBIN_WIDTH)
-    #define in_smallbin_range(sz)  \
-      ((unsigned long) (sz) < (unsigned long) MIN_LARGE_SIZE)
+<pre class="prettyprint lang-javascript">
+#define NBINS             128
+#define NSMALLBINS         64
+#define SMALLBIN_WIDTH    MALLOC_ALIGNMENT
+#define SMALLBIN_CORRECTION (MALLOC_ALIGNMENT > 2 * SIZE_SZ)
+#define MIN_LARGE_SIZE    ((NSMALLBINS - SMALLBIN_CORRECTION) * SMALLBIN_WIDTH)
+#define in_smallbin_range(sz)  \
+  ((unsigned long) (sz) < (unsigned long) MIN_LARGE_SIZE)
+</pre>
+
 然后计算得到所属Smallbin的索引号，计算方法如下所示（即在64-bit下，idx = size/16 + SMALLBIN\_CORRECTION；32-bit下，idx = size/8 + SMALLBIN_CORRECTION）：
 
-    #define smallbin_index(sz) ((SMALLBIN_WIDTH == 16 ? (((unsigned) (sz)) >> 4) : (((unsigned) (sz)) >> 3)) + SMALLBIN_CORRECTION)
+<pre class="prettyprint lang-javascript">
+#define smallbin_index(sz) ((SMALLBIN_WIDTH == 16 ? (((unsigned) (sz)) >> 4) : (((unsigned) (sz)) >> 3)) + SMALLBIN_CORRECTION)
+</pre>
+
 然后根据索引号idx，计算得到该bin数组的地址。
 
-    #define bin_at(m, i) \
-      (mbinptr) (((char *) &((m)->bins[((i) - 1) * 2]))	- offsetof (struct malloc_chunk, fd))
-      //之所以要减去0x10，是因为smallbin是以双向链表的形式存在，fd指针在malloc_chunk结构中的偏移就是0x10
-	  //因此如果把bin数组也当做一个malloc_chunk结构的话，则该chunk的地址就为fd指针地址减去0x10。
+<pre class="prettyprint lang-javascript">
+#define bin_at(m, i) \
+	(mbinptr) (((char *) &((m)->bins[((i) - 1) * 2])) - offsetof (struct malloc_chunk, fd))
+</pre>
+
+之所以要减去0x10，是因为smallbin是以双向链表的形式存在，fd指针在malloc\_chunk结构中的偏移就是0x10,因此如果把bin数组也当做一个malloc\_chunk结构的话，则该chunk的地址就为fd指针地址减去0x10。
+
 ### 2.检查链表完整性，并进行拆链操作 ###
 然后调用last(bin)检查当前bin链表中是否存在空闲的chunk。如果存在，取下最先放入该链表的chunk（FIFO，先入先出规则），并对链表的完整新进行检验（victim->bk->fd==victim?）。如果链表被破坏，打印出错误信息。  
+
 ![smallbin double linked list corrupted](https://raw.githubusercontent.com/fade-vivida/libc-linux-source-code-study/master/libc_study/picture/small_double_linklist_corrupt.PNG)  
+
 然后调用set\_inuse\_bit\_at\_offset()函数，标志当前chunk已被使用。
 
     #define set_inuse_bit_at_offset(p, s) (((mchunkptr) (((char *) (p)) + (s)))->mchunk_size |= PREV_INUSE)
@@ -428,45 +468,49 @@ bin->bk=bck
 bck->fd=bin  
 如果当前arena不是main\_arena，则设置victim的NON\_MAIN_ARENA位。
 
-	bin->bk = bck;
-    bck->fd = bin;
-    if (av != &main_arena)
-    	set_non_main_arena (victim);
+<pre class="prettyprint lang-javascript">
+bin->bk = bck;
+bck->fd = bin;
+if (av != &main_arena)
+	set_non_main_arena (victim);
+</pre>
 ### 3.对取下的chunk进行检查 ###
 然后调用check\_malloced\_chunk()对victim进行一系列检查（check\_malloced\_chunk()会再次调用check\_remalloced\_chunk()，然后为TCACHE机制。
 
-	check_malloced_chunk (av, victim, nb);
-	#if USE_TCACHE
-	  /* While we're here, if we see other chunks of the same size,
-	     stash them in the tcache.  */
-	  size_t tc_idx = csize2tidx (nb);
-	  if (tcache && tc_idx < mp_.tcache_bins)
-	    {
-	      mchunkptr tc_victim;
-	
-	      /* While bin not empty and tcache not full, copy chunks over.  */
-	      while (tcache->counts[tc_idx] < mp_.tcache_count
-		     && (tc_victim = last (bin)) != bin)
+<pre class="prettyprint lang-javascript">
+check_malloced_chunk (av, victim, nb);
+#if USE_TCACHE
+/* While we're here, if we see other chunks of the same size, stash them in the tcache.  */
+size_t tc_idx = csize2tidx (nb);
+if (tcache && tc_idx < mp_.tcache_bins)
+{
+	mchunkptr tc_victim;
+	/* While bin not empty and tcache not full, copy chunks over.  */
+	while (tcache->counts[tc_idx] < mp_.tcache_count && (tc_victim = last (bin)) != bin)
+	{
+		//mp_.tcache_count = 7
+		if (tc_victim != 0)
 		{
-		  if (tc_victim != 0)
-		    {
-		      bck = tc_victim->bk;
-		      set_inuse_bit_at_offset (tc_victim, nb);
-		      if (av != &main_arena)
-			set_non_main_arena (tc_victim);
-		      bin->bk = bck;
-		      bck->fd = bin;
-	
-		      tcache_put (tc_victim, tc_idx);
-	            }
+			bck = tc_victim->bk;
+			set_inuse_bit_at_offset (tc_victim, nb);
+			if (av != &main_arena)
+				set_non_main_arena (tc_victim);
+			bin->bk = bck;
+			bck->fd = bin;
+			tcache_put (tc_victim, tc_idx);
 		}
-	    }
-	#endif 
+	}
+}
+#endif 
+</pre>
 
 之后调用alloc\_perturb()对分配chunk内容进行填充。
-  
-    void *p = chunk2mem (victim);
-	alloc_perturb (p, bytes);
+
+<pre class="prettyprint lang-javascript">
+void *p = chunk2mem (victim);
+alloc_perturb (p, bytes);
+</pre>
+
 至此SmallBin分配机制结束。
 ## 4.LargeBin分配机制 ##
 对于不满足fastbin和smallbin需求的chunk size，则会调用largebin分配机制。具体实现代码如下所示：  
@@ -515,7 +559,7 @@ bck->fd=bin
 **如果分配的size最后需要调用largebin来满足，且当前fastbin链表中存在fastbin chunk（即arena的have\_fastchunks字段为1，则会调用malloc\_consolidata()函数对fastbin chunk进行合并，并加入到unsorted_bin中。**
 
 ## 5.UnsortedBin整理分配机制 ##
-### 1）. malloc源码关于unsortedbin分配的说明 ###
+### 1）malloc源码关于unsortedbin分配的说明 ###
 	 Process recently freed or remaindered chunks, taking one only if
      it is exact fit, or, if this a small request, the chunk is remainder from
      the most recent non-exact fit.  Place other traversed chunks in
@@ -531,7 +575,7 @@ bck->fd=bin
       	int iters = 0;
 大概意思为：unsortedbin分配处理事例是唯一能够将chunk从unsortedbin中放入其他bin的方法，并且使用unsortedbin分配时不是精确匹配，而是大于等于当前需求大小nb的最小值。同时外层的循环的必要性是为了在最后对fastbin进行合并后，重新寻找适合的chunk。（之多循环一次）。
 
-### 2）. 使用last\_remainder进行分配 ###
+### 2）使用last\_remainder进行分配 ###
     while ((victim = unsorted_chunks (av)->bk) != unsorted_chunks (av))
     {
 		bck = victim->bk;
@@ -581,7 +625,7 @@ bck->fd=bin
     	}
 然后对分配的victim chunk进行检查后，返回victim。
 
-### 3）. 对unsorted\_bin中的chunk进行整理 ###
+### 3）对unsorted\_bin中的chunk进行整理 ###
 
      	/* remove from unsorted list */
       	unsorted_chunks (av)->bk = bck;
@@ -928,10 +972,7 @@ bck->fd=bin
       		return p;
     	}
     }
-  }
+	}
     
-## 7.总结 ##
-至此，对于\_int\_malloc()函数的分析结束。对\_int\_malloc()函数的分配机制做一下总结：  
-1.
 
 
