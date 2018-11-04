@@ -88,130 +88,116 @@ static void do_check_free_chunk (mstate av, mchunkptr p)
 #### 1.3.3 do\_check\_chunk()函数 ####
 **注：这里有一点需要注意，就是关于contiguous宏，由于main\_arena是采用brk分配，因此通过main\_arena得到的chunk地址均为连续分配。而MMAP则是通过映射一块大内存，然后模仿brk的分配方式进行分配，理论上分配到的chunk地址是不连续的。**  
 **注：其中所有的assert检查在release版本失效。**
-
-	static void do_check_chunk (mstate av, mchunkptr p)
+<pre class="prettyprint lang-javascript"> 
+static void do_check_chunk (mstate av, mchunkptr p)
+{
+	unsigned long sz = chunksize (p);
+  	/* min and max possible addresses assuming contiguous allocation */
+  	char *max_address = (char *) (av->top) + chunksize (av->top);
+  	char *min_address = max_address - av->system_mem;
+	if (!chunk_is_mmapped (p))
 	{
-		unsigned long sz = chunksize (p);
-	  	/* min and max possible addresses assuming contiguous allocation */
-	  	char *max_address = (char *) (av->top) + chunksize (av->top);
-	  	char *min_address = max_address - av->system_mem;
-		if (!chunk_is_mmapped (p))
-	    {
-			//chunk p是通过brk分配得到，而不是MMAP分配得到
-			/* Has legal address ... */
-	      	if (p != av->top)
-	       	{
-				//如果p不是top chunk
-				if (contiguous (av))
-	            {
-					//表示chunk所在的arena是main_arena，地址连续，则其地址应大于最小地址，小于top chunk地址
-					assert (((char *) p) >= min_address);
-	              	assert (((char *) p + sz) <= ((char *) (av->top)));
-	            }
-	        }
-	      	else
-	        {
-				//如果p是top chunk，则其大小要大于MINSIZE，且其prev_inuse字段置1
-				/* top size is always at least MINSIZE */
-	          	assert ((unsigned long) (sz) >= MINSIZE);
-	          	/* top predecessor always marked inuse */
-	          	assert (prev_inuse (p));
-	        }
-	    }
-	  	else if (!DUMPED_MAIN_ARENA_CHUNK (p))
-	    {
-			//如果该chunk是通过MMAP分配得到的，且其不在一个固定范围内（方便调试的地址？）
-			/* address is outside main heap  */
-	      	if (contiguous (av) && av->top != initial_top (av))
-	        {
-				//如果当前arena top chunk字段与初始top chunk不同（即MMAP了一块新内存）
-				assert (((char *) p) < min_address || ((char *) p) >= max_address);
-	        }
-	      	/* chunk is page-aligned */
-	      	assert (((prev_size (p) + sz) & (GLRO (dl_pagesize) - 1)) == 0);
-			//页对齐
-	      	/* mem is aligned */
-	      	assert (aligned_OK (chunk2mem (p)));
-	    }
+		//chunk p是通过brk分配得到，而不是MMAP分配得到
+		/* Has legal address ... */
+		if (p != av->top)
+		{
+			//如果p不是top chunk
+			if (contiguous (av))
+			{
+				//表示chunk所在的arena是main_arena，地址连续，则其地址应大于最小地址，小于top chunk地址
+				assert (((char *) p) >= min_address);
+				assert (((char *) p + sz) <= ((char *) (av->top)));
+			}
+		}
+		else
+		{
+			//如果p是top chunk，则其大小要大于MINSIZE，且其prev_inuse字段置1
+			/* top size is always at least MINSIZE */
+			assert ((unsigned long) (sz) >= MINSIZE);
+			/* top predecessor always marked inuse */
+			assert (prev_inuse (p));
+		}
 	}
-
+	else if (!DUMPED_MAIN_ARENA_CHUNK (p))
+	{
+		//如果该chunk是通过MMAP分配得到的，且其不在一个固定范围内（方便调试的地址？）
+		/* address is outside main heap  */
+		if (contiguous (av) && av->top != initial_top (av))
+		{
+			//如果当前arena top chunk字段与初始top chunk不同（即MMAP了一块新内存）
+			assert (((char *) p) < min_address || ((char *) p) >= max_address);
+		}
+		/* chunk is page-aligned */
+		assert (((prev_size (p) + sz) & (GLRO (dl_pagesize) - 1)) == 0);		//页对齐
+		/* mem is aligned */
+		assert (aligned_OK (chunk2mem (p)));
+		}
+}
+</pre>
 
 ## 2. 放入fastbin链表##
-	/*
-    If eligible, place chunk on a fastbin so it can be found
-    and used quickly in malloc. */
-	//如果符合下列条件则将chunk放在fastbin上，以便加快释放与分配
-	if ((unsigned long)(size) <= (unsigned long)(get_max_fast ())
-		#if TRIM_FASTBINS
-    	/* If TRIM_FASTBINS set, don't place chunks bordering top into fastbins */
-      	&& (chunk_at_offset(p, size) != av->top)
-		#endif
-      ) 
+<pre class="prettyprint lang-javascript"> 
+/* If eligible, place chunk on a fastbin so it can be found and used quickly in malloc. */   //如果符合下列条件则将chunk放在fastbin上，以便加快释放与分配
+if ((unsigned long)(size) <= (unsigned long)(get_max_fast ())\
+	#if TRIM_FASTBINS 	/* If TRIM_FASTBINS set, don't place chunks bordering top into fastbins */
+  	&& (chunk_at_offset(p, size) != av->top)
+	#endif
+    ) 
+</pre>
 如果符合以下2个条件，则考虑将该chunk加入fastbin链表。  
 条件1：释放chunk的size小于等于get\_max\_fast()宏定义值（64bit:0x80,32bit:0x40)  
-条件2：chunk p不是紧挨着top chunk（否则，将其合并到top chunk中）
-
+条件2：如果定义了 TRIM\_FASTBINS 宏，则chunk p不能紧挨着top chunk（否则，将其合并到top chunk中）
+<pre class="prettyprint lang-javascript"> 
+{
+	if (__builtin_expect (chunksize_nomask (chunk_at_offset (p, size)) <= 2 * SIZE_SZ, 0)
+		|| __builtin_expect (chunksize (chunk_at_offset (p, size)) >= av->system_mem, 0))
 	{
-		if (__builtin_expect (chunksize_nomask (chunk_at_offset (p, size)) <= 2 * SIZE_SZ, 0)
-			|| __builtin_expect (chunksize (chunk_at_offset (p, size)) >= av->system_mem, 0))
-      	{
-			bool fail = true;
-			/* We might not have a lock at this point and concurrent modifications
-	   		of system_mem might result in a false positive.  Redo the test after
-	   		getting the lock.  */
-			if (!have_lock)
-	  		{
-	    			__libc_lock_lock (av->mutex);
-	    			fail = (chunksize_nomask (chunk_at_offset (p, size)) <= 2 * SIZE_SZ
-		    		|| chunksize (chunk_at_offset (p, size)) >= av->system_mem);
-	    			__libc_lock_unlock (av->mutex);
-	  		}
-			if (fail)
-	  			malloc_printerr ("free(): invalid next size (fast)");
-				//next chunk size必须大于2*SIZE_SZ且小于av->system_mem
-以上操作为检查next chunk的size字段是否符合要求（大于2*SIZE\_SZ，且小于av->system\_mem)。
+		bool fail = true;
+		/* We might not have a lock at this point and concurrent modifications of system_mem might result in a false positive.  Redo the test after getting the lock.  */
+		if (!have_lock)
+		{
+			__libc_lock_lock (av->mutex);
+			fail = (chunksize_nomask (chunk_at_offset (p, size)) <= 2 * SIZE_SZ || chunksize (chunk_at_offset (p, size)) >= av->system_mem);
+			__libc_lock_unlock (av->mutex);
+		}
+		if (fail)
+			malloc_printerr ("free(): invalid next size (fast)");	//next chunk size必须大于2*SIZE_SZ且小于av->system_mem
+		//以上操作为检查next chunk的size字段是否符合要求（大于2*SIZE\_SZ，且小于av->system\_mem)。
+	}
+	free_perturb (chunk2mem(p), size - 2 * SIZE_SZ);		//如果定义了填充字节，则在free时将其填充
+	atomic_store_relaxed (&av->have_fastchunks, true);		//将arena的have_fastchunks字段值1，表示当前fastbin链表中有空闲chunk
 
-      		}
-		free_perturb (chunk2mem(p), size - 2 * SIZE_SZ);
-		//如果定义了填充字节，则在free时将其填充
-
-		atomic_store_relaxed (&av->have_fastchunks, true);
-		//将arena的have_fastchunks字段值1，表示当前fastbin链表中有空闲chunk
-
-    	unsigned int idx = fastbin_index(size);
-    	fb = &fastbin (av, idx);
-
-    	/* Atomically link P to its fastbin: P->FD = *FB; *FB = P;  */
-    	mchunkptr old = *fb, old2;
-		if (SINGLE_THREAD_P)
-      	{
-			/* Check that the top of the bin is not the record we are going to
-	   		add (i.e., double free).  */
-			if (__builtin_expect (old == p, 0))
-	  			malloc_printerr ("double free or corruption (fasttop)");
-			p->fd = old;
-			*fb = p;
-      	}
+	unsigned int idx = fastbin_index(size);
+	fb = &fastbin (av, idx);
+	
+	/* Atomically link P to its fastbin: P->FD = *FB; *FB = P;  */
+	mchunkptr old = *fb, old2;
+	if (SINGLE_THREAD_P)
+	{
+		/* Check that the top of the bin is not the record we are going to add (i.e., double free).  */
+		if (__builtin_expect (old == p, 0))
+			malloc_printerr ("double free or corruption (fasttop)");
+		p->fd = old;
+		*fb = p;
+	}
+</pre>
 这里有一个重要检查：当前要加入的chunk是否为fastbin中已经记录的top chunk。  
 **因此，针对这条检查规则，产生了一个重要的绕过方法（即在double free时，针对需要double free的chunk A，可以采用free(A),free(B),free(A)的方式进行绕过）。**  
-
-    	else
-      		do
-			{
-	  			/* Check that the top of the bin is not the record we are going to
-	     		add (i.e., double free).  */
-	  			if (__builtin_expect (old == p, 0))
-	    			malloc_printerr ("double free or corruption (fasttop)");
-	  			p->fd = old2 = old;
-			}
-      		while ((old = catomic_compare_and_exchange_val_rel (fb, p, old2)) != old2);
-			/* Check that size of fastbin chunk at the top is the same as
-       		size of the chunk that we are adding.  We can dereference OLD
-       		only if we have the lock, otherwise it might have already been
-       		allocated again.  */
-    		if (have_lock && old != NULL && __builtin_expect (fastbin_index (chunksize (old)) != idx, 0))
-      			malloc_printerr ("invalid fastbin entry (free)");
-	}
+<pre class="prettyprint lang-javascript"> 
+	else
+		do
+		{
+			/* Check that the top of the bin is not the record we are going to add (i.e., double free).  */
+			if (__builtin_expect (old == p, 0))
+				malloc_printerr ("double free or corruption (fasttop)");
+			p->fd = old2 = old;
+		} while ((old = catomic_compare_and_exchange_val_rel (fb, p, old2)) != old2);
+		/* Check that size of fastbin chunk at the top is the same as size of the chunk that we are adding.  
+			We can dereference OLD only if we have the lock, otherwise it might have already been allocated again.  */
+		if (have_lock && old != NULL && __builtin_expect (fastbin_index (chunksize (old)) != idx, 0))
+			malloc_printerr ("invalid fastbin entry (free)");
+}
+</pre>
 多线程的加入操作，然后检查顶部fastbin chunk的大小是否与我们添加的chunk的大小相同。
 
 ## 3. 放入unsortedbin链表 ##
@@ -247,8 +233,7 @@ test 3：再次检查当前chunk是否为inuse
       		malloc_printerr ("free(): invalid next size (normal)");
 next chunk的size字段必须大于2*SIZE\_SZ且小于av->system\_mem（av->sytem\_mem就是heap段的大小）
 
-		free_perturb (chunk2mem(p), size - 2 * SIZE_SZ);
-		//进行字段填充
+		free_perturb (chunk2mem(p), size - 2 * SIZE_SZ);		//进行字段填充
 
 		/* consolidate backward */
     	if (!prev_inuse(p)) 
@@ -276,9 +261,8 @@ next chunk的size字段必须大于2*SIZE\_SZ且小于av->system\_mem（av->syte
 如果next chunk不为top chunk且处于free状态，则后向合并。否则修改next chunk的preinuse字段为0，标志当前chunk已被释放。
 
 			/*
-			Place the chunk in unsorted chunk list. Chunks are
-			not placed into regular bins until after they have
-			been given one chance to be used in malloc.
+			Place the chunk in unsorted chunk list. Chunks are not placed into regular bins until after they 
+			have been given one chance to be used in malloc.
       		*/
 			bck = unsorted_chunks(av);
       		fwd = bck->fd;
@@ -295,10 +279,8 @@ next chunk的size字段必须大于2*SIZE\_SZ且小于av->system\_mem（av->syte
       		bck->fd = p;
       		fwd->bk = p;
 		
-			set_head(p, size | PREV_INUSE);
-			//设置chunk p的PREV_INUSE字段为1
-      		set_foot(p, size);
-			//设置next chunk的presize字段为当前chunk p的size
+			set_head(p, size | PREV_INUSE);		//设置chunk p的PREV_INUSE字段为1
+      		set_foot(p, size);		//设置next chunk的presize字段为当前chunk p的size
       		check_free_chunk(av, p);
 		}
 然后将chunk p加入unsortedbin链表中，并修改当前unsortedbin链表指针及chunk p相应链表指针，设置chunk p相应字段值，然后调用check\_free\_chunk()对chunk p进行检查。
