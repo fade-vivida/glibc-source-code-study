@@ -18,91 +18,73 @@
 #### 1.3.1 do\_check\_inuse\_check()函数 ####
 其中check\_inuse\_chunk()函数将调用do\_check\_inuse\_chunk()函数，该函数具体定义及相关解释如下所示：  
 **注：一个十分有趣且重要的事情，在实际运行程序时可以发现对于大多数程序而言assert断言的判断好像并未实现，后经过查询资料发现assert语句只有在定义了DEBUG宏（也就是调试版本中）才会执行，在发行版本中（release版）assert语句没有实际意义。**
-
-	static void do_check_inuse_chunk (mstate av, mchunkptr p)
+<pre class="prettyprint lang-javascript"> 
+static void do_check_inuse_chunk (mstate av, mchunkptr p)
+{
+	mchunkptr next;
+	do_check_chunk (av, p);		//调用do_check_chunk函数对chunk p进行检查
+	if (chunk_is_mmapped (p))
+		return; /* mmapped chunks have no next/prev */
+	//检查chunk p的IS_MMAPPED字段是否设置，如果已经设置，则直接返回。
+	/* Check whether it claims to be in use ... */
+  	assert (inuse (p));		//检查p的是否处于inuse状态，检查方式为：看next chunk的pre_inuse字段是否为1
+	next = next_chunk (p);
+	/* ... and is surrounded by OK chunks.Since more things can be checked with free chunks than inuse ones,
+	if an inuse chunk borders them and debug is on, it's worth doing them.*/
+  	if (!prev_inuse (p))
 	{
-		mchunkptr next;
-		do_check_chunk (av, p);
-		//调用do_check_chunk函数对chunk p进行检查
-		if (chunk_is_mmapped (p))
-			return; /* mmapped chunks have no next/prev */
-		//检查chunk p的IS_MMAPPED字段是否设置，如果已经设置，则直接返回。
-		/* Check whether it claims to be in use ... */
-	  	assert (inuse (p));
-		//检查p的是否处于inuse状态，检查方式为：看next chunk的pre_inuse字段是否为1
-		next = next_chunk (p);
-		/* ... and is surrounded by OK chunks.
-		Since more things can be checked with free chunks than inuse ones,
-		if an inuse chunk borders them and debug is on, it's worth doing them.
-	   	*/
-	  	if (!prev_inuse (p))
-	    {
-			/* Note that we cannot even look at prev unless it is not inuse */
-	      		//如果前一块也是处于free状态，则必须对其也进行相应检查
-			mchunkptr prv = prev_chunk (p);
-	      	assert (next_chunk (prv) == p);
-			//pre chunk的next chunk必须为当前chunk p，该检查在release版本失效
-	      	do_check_free_chunk (av, prv);
-			//对prv进行free chunk的检查
-	    }
-		if (next == av->top)
-	    {
-			assert (prev_inuse (next));
-			assert (chunksize (next) >= MINSIZE);
-			//如果next chunk为top chunk，其prev_inuse字段必须设置为1，且其size大小必须大于MINSIZE	      		    
-		}
-	  	else if (!inuse (next))
-	    	do_check_free_chunk (av, next);
-			//如果后一块也是处于free状态，则对其也进行free chunk检查
+		/* Note that we cannot even look at prev unless it is not inuse */
+		//如果前一块也是处于free状态，则必须对其也进行相应检查
+		mchunkptr prv = prev_chunk (p);
+		assert (next_chunk (prv) == p);		//pre chunk的next chunk必须为当前chunk p，该检查在release版本失效
+		do_check_free_chunk (av, prv);		//对prv进行free chunk的检查
 	}
-
+	if (next == av->top)
+	{
+		assert (prev_inuse (next));
+		assert (chunksize (next) >= MINSIZE);
+		//如果next chunk为top chunk，其prev_inuse字段必须设置为1，且其size大小必须大于MINSIZE	
+	}
+	else if (!inuse (next))
+		do_check_free_chunk (av, next);		//如果后一块也是处于free状态，则对其也进行free chunk检查
+}
+</pre>
 #### 1.3.2 do\_check\_free\_chunk()函数 ####
 **注：其中的所有assert检查在release版本失效。**
-
-	static void do_check_free_chunk (mstate av, mchunkptr p)
+<pre class="prettyprint lang-javascript"> 
+static void do_check_free_chunk (mstate av, mchunkptr p)
+{
+	INTERNAL_SIZE_T sz = chunksize_nomask (p) & ~(PREV_INUSE | NON_MAIN_ARENA);
+	//这里的sz是去除标志位PREV_INUSE和NON_MAIN_ARENA，但没有去除IS_MMAPPED
+  	mchunkptr next = chunk_at_offset (p, sz);
+	do_check_chunk (av, p);		//检查chunk p的合法性
+	
+	/* Chunk must claim to be free ... */
+  	assert (!inuse (p));		//chunk p必须是free状态
+	assert (!chunk_is_mmapped (p));		//chunk p不是通过MMAP得到的
+	
+	/* Unless a special marker, must have OK fields */
+  	if ((unsigned long) (sz) >= MINSIZE)
 	{
-		INTERNAL_SIZE_T sz = chunksize_nomask (p) & ~(PREV_INUSE | NON_MAIN_ARENA);
-		//这里的sz是去除标志位PREV_INUSE和NON_MAIN_ARENA，但没有去除IS_MMAPPED
-	  	mchunkptr next = chunk_at_offset (p, sz);
+		assert ((sz & MALLOC_ALIGN_MASK) == 0);		//sz大小对齐检查
+		assert (aligned_OK (chunk2mem (p)));		//用户输入数据起始地址对齐检查（本质与chunk p起始地址对齐检查一致）
+      	
+		/* ... matching footer field */
+		assert (prev_size (next_chunk (p)) == sz);		//next chunk的pre size必须等于当前块的size
+      	
+		/* ... and is fully consolidated */
+		assert (prev_inuse (p));		//chunk p的prev_inuse字段必须为1，即不允许出现两个相邻且处于free状态的块（未合并）
+		assert (next == av->top || inuse (next));		//next chunk要么是top chunk，要不是处于inuse状态的chunk，检查本质也是不允许出现两个相邻且处于free状态的块
 		
-		do_check_chunk (av, p);
-		//检查chunk p的合法性
-		
-		/* Chunk must claim to be free ... */
-	  	assert (!inuse (p));	
-		//chunk p必须是free状态
-	  	
-		assert (!chunk_is_mmapped (p));
-		//chunk p不是通过MMAP得到的
-		
-		/* Unless a special marker, must have OK fields */
-	  	if ((unsigned long) (sz) >= MINSIZE)
-	    {
-			assert ((sz & MALLOC_ALIGN_MASK) == 0);
-			//sz大小对齐检查
-	      	
-			assert (aligned_OK (chunk2mem (p)));
-			//用户输入数据起始地址对齐检查（本质与chunk p起始地址对齐检查一致）
-	      	
-			/* ... matching footer field */
-	      	assert (prev_size (next_chunk (p)) == sz);
-			//next chunk的pre size必须等于当前块的size
-	      	
-			/* ... and is fully consolidated */
-	      	assert (prev_inuse (p));
-			//chunk p的prev_inuse字段必须为1，即不允许出现两个相邻且处于free状态的块（未合并）
-	      	assert (next == av->top || inuse (next));
-			//next chunk要么是top chunk，要不是处于inuse状态的chunk，检查本质也是不允许出现两个相邻且处于free状态的块
-			
-			/* ... and has minimally sane links */
-	      	assert (p->fd->bk == p);
-	      	assert (p->bk->fd == p);
-			//双向链表指针检查
-	    }
-	  	else /* markers are always of size SIZE_SZ */
-	    	assert (sz == SIZE_SZ);
+		/* ... and has minimally sane links */
+		assert (p->fd->bk == p);
+		assert (p->bk->fd == p);
+		//双向链表指针检查
 	}
-
+	else /* markers are always of size SIZE_SZ */
+		assert (sz == SIZE_SZ);
+}
+</pre>
 #### 1.3.3 do\_check\_chunk()函数 ####
 **注：这里有一点需要注意，就是关于contiguous宏，由于main\_arena是采用brk分配，因此通过main\_arena得到的chunk地址均为连续分配。而MMAP则是通过映射一块大内存，然后模仿brk的分配方式进行分配，理论上分配到的chunk地址是不连续的。**  
 **注：其中所有的assert检查在release版本失效。**
