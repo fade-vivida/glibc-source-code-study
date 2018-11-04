@@ -461,8 +461,9 @@ if (in_smallbin_range (nb))
 ![smallbin double linked list corrupted](https://raw.githubusercontent.com/fade-vivida/libc-linux-source-code-study/master/libc_study/picture/small_double_linklist_corrupt.PNG)  
 
 然后调用set\_inuse\_bit\_at\_offset()函数，标志当前chunk已被使用。
-
-    #define set_inuse_bit_at_offset(p, s) (((mchunkptr) (((char *) (p)) + (s)))->mchunk_size |= PREV_INUSE)
+<pre class="prettyprint lang-javascript">
+#define set_inuse_bit_at_offset(p, s) (((mchunkptr) (((char *) (p)) + (s)))->mchunk_size |= PREV_INUSE)
+</pre>
 然后进行双向链表的拆链操作  
 bin->bk=bck  
 bck->fd=bin  
@@ -512,43 +513,51 @@ alloc_perturb (p, bytes);
 </pre>
 
 至此SmallBin分配机制结束。
-## 4.LargeBin分配机制 ##
-对于不满足fastbin和smallbin需求的chunk size，则会调用largebin分配机制。具体实现代码如下所示：  
-**注：这里其实并没有进行真正的分配，只是计算了当前申请大小所在的largebin数组下标。真正的分配的第5部分，对unsortedbin进行整理后。**
 
- 	else
-    {
-      idx = largebin_index (nb);
-      if (atomic_load_relaxed (&av->have_fastchunks))
-        malloc_consolidate (av);
-    }
-其中largebin\_index()的计算方法如下：
 
-    #define largebin_index(sz) (SIZE_SZ == 8 ? largebin_index_64 (sz) : MALLOC_ALIGNMENT == 16 ? 	largebin_index_32_big (sz) : largebin_index_32 (sz))
+## 4.LargeBin分配机制（非真正功能实现） ##
 
-	#define largebin_index_32(sz)                                                \
-	  	(((((unsigned long) (sz)) >> 6) <= 38) ?  56 + (((unsigned long) (sz)) >> 6) :\
-	   	((((unsigned long) (sz)) >> 9) <= 20) ?  91 + (((unsigned long) (sz)) >> 9) :\
-	   	((((unsigned long) (sz)) >> 12) <= 10) ? 110 + (((unsigned long) (sz)) >> 12) :\
-	   	((((unsigned long) (sz)) >> 15) <= 4) ? 119 + (((unsigned long) (sz)) >> 15) :\
-	   	((((unsigned long) (sz)) >> 18) <= 2) ? 124 + (((unsigned long) (sz)) >> 18) :\
-	   	126)
+对于不满足fastbin和smallbin需求的chunk size，则会调用largebin分配机制。  
+ 
+**注：这部分代码并没有进行真正的分配，只是计算了当前申请大小所在的largebin数组下标。真正的分配的第5部分，对unsortedbin进行整理后。**
+<pre class="prettyprint lang-javascript">
+else
+{
+	idx = largebin_index (nb);
+	if (atomic_load_relaxed (&av->have_fastchunks))
+		malloc_consolidate (av);
+}
+</pre>
+**注：这里了有一个需要注意的地方（malloc\_consolidata），也就是说如果我们要申请一个largebin大小的chunk，那么会调用malloc\_consolidate对fastbin chunk进行合并。**
+  
+**largebin\_index()**的计算方法如下：
+<pre class="prettyprint lang-javascript">
+#define largebin_index(sz) (SIZE_SZ == 8 ? largebin_index_64 (sz) : MALLOC_ALIGNMENT == 16 ? 	largebin_index_32_big (sz) : largebin_index_32 (sz))
 
-	#define largebin_index_32_big(sz)                                            \
-	  	(((((unsigned long) (sz)) >> 6) <= 45) ?  49 + (((unsigned long) (sz)) >> 6) :\
-	   	((((unsigned long) (sz)) >> 9) <= 20) ?  91 + (((unsigned long) (sz)) >> 9) :\
-	   	((((unsigned long) (sz)) >> 12) <= 10) ? 110 + (((unsigned long) (sz)) >> 12) :\
-	   	((((unsigned long) (sz)) >> 15) <= 4) ? 119 + (((unsigned long) (sz)) >> 15) :\
-	   	((((unsigned long) (sz)) >> 18) <= 2) ? 124 + (((unsigned long) (sz)) >> 18) :\
-	   	126)
+#define largebin_index_32(sz)                                                \
+  	(((((unsigned long) (sz)) >> 6) <= 38) ?  56 + (((unsigned long) (sz)) >> 6) :\
+   	((((unsigned long) (sz)) >> 9) <= 20) ?  91 + (((unsigned long) (sz)) >> 9) :\
+   	((((unsigned long) (sz)) >> 12) <= 10) ? 110 + (((unsigned long) (sz)) >> 12) :\
+   	((((unsigned long) (sz)) >> 15) <= 4) ? 119 + (((unsigned long) (sz)) >> 15) :\
+   	((((unsigned long) (sz)) >> 18) <= 2) ? 124 + (((unsigned long) (sz)) >> 18) :\
+   	126)
 
-	#define largebin_index_64(sz)                                                \
-  		(((((unsigned long) (sz)) >> 6) <= 48) ?  48 + (((unsigned long) (sz)) >> 6) :\
-   		((((unsigned long) (sz)) >> 9) <= 20) ?  91 + (((unsigned long) (sz)) >> 9) :\
-   		((((unsigned long) (sz)) >> 12) <= 10) ? 110 + (((unsigned long) (sz)) >> 12) :\
-   		((((unsigned long) (sz)) >> 15) <= 4) ? 119 + (((unsigned long) (sz)) >> 15) :\
-   		((((unsigned long) (sz)) >> 18) <= 2) ? 124 + (((unsigned long) (sz)) >> 18) :\
-   		126)
+#define largebin_index_32_big(sz)                                            \
+  	(((((unsigned long) (sz)) >> 6) <= 45) ?  49 + (((unsigned long) (sz)) >> 6) :\
+   	((((unsigned long) (sz)) >> 9) <= 20) ?  91 + (((unsigned long) (sz)) >> 9) :\
+   	((((unsigned long) (sz)) >> 12) <= 10) ? 110 + (((unsigned long) (sz)) >> 12) :\
+   	((((unsigned long) (sz)) >> 15) <= 4) ? 119 + (((unsigned long) (sz)) >> 15) :\
+   	((((unsigned long) (sz)) >> 18) <= 2) ? 124 + (((unsigned long) (sz)) >> 18) :\
+   	126)
+
+#define largebin_index_64(sz)                                                \
+	(((((unsigned long) (sz)) >> 6) <= 48) ?  48 + (((unsigned long) (sz)) >> 6) :\
+	((((unsigned long) (sz)) >> 9) <= 20) ?  91 + (((unsigned long) (sz)) >> 9) :\
+	((((unsigned long) (sz)) >> 12) <= 10) ? 110 + (((unsigned long) (sz)) >> 12) :\
+	((((unsigned long) (sz)) >> 15) <= 4) ? 119 + (((unsigned long) (sz)) >> 15) :\
+	((((unsigned long) (sz)) >> 18) <= 2) ? 124 + (((unsigned long) (sz)) >> 18) :\
+	126)
+</pre>
 **注：重要结论！！！**  
 **32bit下，largebin的下限范围为：512 byte**  
 **64bit下，largebin的下限范围为：1024 byte**  
