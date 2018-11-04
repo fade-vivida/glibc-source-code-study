@@ -344,37 +344,38 @@ test 4：next chunk的size字段必须大于 2*SIZE\_SZ 且小于 av->system\_me
 	else {
     	munmap_chunk (p);
 	}
-其中munmap\_chunk的定义如下所示：
-
+	
+	//其中munmap\_chunk的定义如下所示：\
 	static void munmap_chunk (mchunkptr p)
 	{
 		INTERNAL_SIZE_T size = chunksize (p);
 		assert (chunk_is_mmapped (p));
-		
 		/* Do nothing if the chunk is a faked mmapped chunk in the dumped
-	   	main arena.  We never free this memory.  */
-	  	if (DUMPED_MAIN_ARENA_CHUNK (p))
-	    	return;
-到底什么是DUMPED\_MAIN\_ARENA\_CHUNK?
+		main arena.  We never free this memory.  */
+		if (DUMPED_MAIN_ARENA_CHUNK (p))
+			return;
+		
+		//到底什么是DUMPED_MAIN_ARENA_CHUNK?
 
 		uintptr_t block = (uintptr_t) p - prev_size (p);
 	  	size_t total_size = prev_size (p) + size;
 
-	  	/* Unfortunately we have to do the compilers job by hand here.  Normally
-	    we would test BLOCK and TOTAL-SIZE separately for compliance with the
-	    page size.  But gcc does not recognize the optimization possibility
-	    (in the moment at least) so we combine the two values into one before
-	    the bit test.  */
-	  	if (__builtin_expect (((block | total_size) & (GLRO (dl_pagesize) - 1)) != 0, 0))
-	    	malloc_printerr ("munmap_chunk(): invalid pointer");
+		/* Unfortunately we have to do the compilers job by hand here.  Normally
+		we would test BLOCK and TOTAL-SIZE separately for compliance with the
+		page size.  But gcc does not recognize the optimization possibility
+		(in the moment at least) so we combine the two values into one before
+		the bit test.  */
+		if (__builtin_expect (((block | total_size) & (GLRO (dl_pagesize) - 1)) != 0, 0))
+			malloc_printerr ("munmap_chunk(): invalid pointer");
 		//检查是否页对齐
 		atomic_decrement (&mp_.n_mmaps);
-	  	atomic_add (&mp_.mmapped_mem, -total_size);
-当前mmap出来的区域减1，mmap出来的总大小减去total\_size
+		atomic_add (&mp_.mmapped_mem, -total_size);
+
+		//当前mmap出来的区域减1，mmap出来的总大小减去total\_size
 
 		/* If munmap failed the process virtual memory address space is in a
-	    bad shape.  Just leave the block hanging around, the process will
-	    terminate shortly anyway since not much can be done.  */
-	  	__munmap ((char *) block, total_size);
+		bad shape.  Just leave the block hanging around, the process will
+		terminate shortly anyway since not much can be done.  */
+		__munmap ((char *) block, total_size);
 	}	
 </pre>
