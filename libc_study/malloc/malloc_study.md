@@ -696,16 +696,12 @@ for (;; )
 #### 3.2） 对largebin chunk进行整理 ####
 如果victim size不在smallbin范围内，则将其加入对应的largebin链表中，并维持同一个largbin链表中chunk大小的有序性（从大到小的顺序）。在这里需要注意的一点是，fd\_nextsize和bk\_nextsize两个指针的含义，这两个指针用来链接在同一个largebin链表中不同size的chunk，这一个链表也是有序的，顺序也是从大到小。  
 
-即假设存在5个chunk，A0,A1,A2,B0,C0（其中A0=A1=A2，C0>B0>A0），且加入顺序为A0，A1，A2，B0，C0  
+即假设存在5个chunk，A0,A1,A2,B0,C0（其中A0=A1=A2，C0>B0>A0），且加入顺序为A0，A1，A2，B0，C0。则最后这5个chunk在largebin链表中的排布如下图所示：  
 
-则由fd、bk组成的链表为：  
-Largebin[x]:
-fd = C0		bk = A0  
-A0:  
-fd = 
+![largebin](https://raw.githubusercontent.com/fade-vivida/libc-linux-source-code-study/master/libc_study/picture/largebin.jpg)  
 
-C0 || B0 || A0 || A1 || A2  
-有fd\_nextsize、bk\_nextsize组成链表为：C0 || B0 || A0
+下面我们从代码来分析，这5个chunk为什么会是上面这种排布：  
+
 <pre class="prettyprint lang-javascript">
 		else
 		{
@@ -740,16 +736,17 @@ C0 || B0 || A0 || A1 || A2
 					if ((unsigned long) size == (unsigned long) chunksize_nomask (fwd))
 						/* Always insert in the second position.  */
 						fwd = fwd->fd;
-						//由于当前链表中已经存在该大小的chunk，因此不再将victim chunk链入fd_nextsize和bk_nextsize组成的链表中
+						//在largebin链表中发现已经有该大小的chunk，因此不再将victim chunk链入fd_nextsize和bk_nextsize组成的链表中
 					else
 					{
 						victim->fd_nextsize = fwd;
 						victim->bk_nextsize = fwd->bk_nextsize;
 						fwd->bk_nextsize = victim;
 						victim->bk_nextsize->fd_nextsize = victim;
+						//将victim chunk链入fd_nextsize和bk_nextsize组成的链表中
 					}
 					bck = fwd->bk;
-				}
+				} 
 			}
 			else
 				victim->fd_nextsize = victim->bk_nextsize = victim;
@@ -759,7 +756,7 @@ C0 || B0 || A0 || A1 || A2
 		victim->fd = fwd;
 		fwd->bk = victim;
 		bck->fd = victim;
-		
+		//将victim chunk 链入fd，bk组成的链表中
 		#define MAX_ITERS       10000
 		if (++iters >= MAX_ITERS)
 			break;
@@ -772,6 +769,7 @@ C0 || B0 || A0 || A1 || A2
 **本次分配主要是在nb大小所对应的largebin链表中尝试进行分配，之所以要有此步骤是因为同一个largebin链表中的chunk size是不同的，这一点与smallbin不相同**  
 
 当把unsorted\_bin中的chunk都移动到smallbin或largebin中后，如果当前请求大小大于1024（不在smallbin范围内），则使用对应的largebin链表进行分配，遍历largebin链表寻找满足分配size（nb）的最小的chunk。由于相同size的chunk不链入fd\_nextsize，bk\_nextsize组成的链表中，因此如果找到的满足条件的chunk，其在fd,bk组成的链表中还有相同大小的chunk，则取位置第二的chunk，避免破坏fd\_nextsize,bk\_nextsize组成的链表。
+
 <pre class="prettyprint lang-javascript">	
 	/*
 	If a large request, scan through the chunks of current bin in
