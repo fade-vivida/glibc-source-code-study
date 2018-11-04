@@ -334,8 +334,9 @@ test 4：next chunk的size字段必须大于 2*SIZE\_SZ 且小于 av->system\_me
 }
 </pre>
 
-如果释放了一个很大的chunk，导致当前某个空闲chunk的size大于一个阈值（FASTBIN\_CONSOLIDATION\_THRESHOLD=0x10000），则对当前fastbin中的chunk进行合并（调用malloc\_consolidate()函数），并对top chunk进行剪枝。  
-**注：一个重要的只是点，即释放一个大于0x10000的chunk时，能够导致fastbin链表中的chunk进行合并**
+如果释放了一个很大的chunk，导致当前某个空闲chunk的size大于一个阈值（FASTBIN\_CONSOLIDATION\_THRESHOLD=0x10000），则对当前fastbin中的chunk进行合并（调用malloc\_consolidate()函数），并对top chunk进行剪枝。
+  
+**注：一个重要知识点（CTF考点），即释放一个大于0x10000的chunk时，能够导致fastbin链表中的chunk进行合并**
 ### 3.2 如果待释放chunk是通过mmap分配的 ###
 很简单，调用munmap\_chunk即可。
 <pre class="prettyprint lang-javascript">

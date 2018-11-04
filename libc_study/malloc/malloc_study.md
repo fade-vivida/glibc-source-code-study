@@ -372,6 +372,9 @@ alloc\_perturb()函数定义如下：
 至此，在\_int\_malloc()函数中fastbin部分的分析结束。
 
 ## 3.SmallBin分配机制 ##
+
+**Smallbin是先入先出机制，即最先被放入的chunk，最先被遍历到。**
+
 <pre class="prettyprint lang-javascript">
 #define NSMALLBINS 64
 #define SMALLBIN_WIDTHMALLOC_ALIGNMENT
@@ -564,85 +567,92 @@ else
 **64bit下，largebin又分为33个区间大小都为64byte，15个区间大小为512byte,9个区间大小为4096byte等等的小区间**  
 </br>
 </br>
-**注：CTF中的一个重要考点！！！**  
-**如果分配的size最后需要调用largebin来满足，且当前fastbin链表中存在fastbin chunk（即arena的have\_fastchunks字段为1，则会调用malloc\_consolidata()函数对fastbin chunk进行合并，并加入到unsorted_bin中。**
+**注：CTF中的一个重要考点！！！，malloc\_consolidate的调用时机**  
+1. 如果分配的size最后需要调用largebin来满足，且当前fastbin链表中存在fastbin chunk（即arena的have\_fastchunks字段为1，则会调用malloc\_consolidata()函数对fastbin chunk进行合并，并加入到unsorted_bin中。  
+2. 在free的时候，如果free的是一个largebin，也会调用malloc\_consolidate。
 
 ## 5.UnsortedBin整理分配机制 ##
 ### 1）malloc源码关于unsortedbin分配的说明 ###
-	 Process recently freed or remaindered chunks, taking one only if
-     it is exact fit, or, if this a small request, the chunk is remainder from
-     the most recent non-exact fit.  Place other traversed chunks in
-     bins.  Note that this step is the only place in any routine where
-     chunks are placed in bins.
+<pre class="prettyprint lang-javascript">
+ Process recently freed or remaindered chunks, taking one only if
+ it is exact fit, or, if this a small request, the chunk is remainder from
+ the most recent non-exact fit.  Place other traversed chunks in
+ bins.  Note that this step is the only place in any routine where
+ chunks are placed in bins.
 
-     The outer loop here is needed because we might not realize until
-     near the end of malloc that we should have consolidated, so must
-     do so and retry. This happens at most once, and only when we would
-     otherwise need to expand memory to service a "small" request.
-	for (;; )
-    {
-      	int iters = 0;
-大概意思为：unsortedbin分配处理事例是唯一能够将chunk从unsortedbin中放入其他bin的方法，并且使用unsortedbin分配时不是精确匹配，而是大于等于当前需求大小nb的最小值。同时外层的循环的必要性是为了在最后对fastbin进行合并后，重新寻找适合的chunk。（之多循环一次）。
+ The outer loop here is needed because we might not realize until
+ near the end of malloc that we should have consolidated, so must
+ do so and retry. This happens at most once, and only when we would
+ otherwise need to expand memory to service a "small" request.
+for (;; )
+{
+  	int iters = 0;
+</pre>
+大概意思为：unsortedbin分配处理事例是唯一能够将chunk从unsortedbin中放入其他bin的方法，并且使用unsortedbin分配时不是精确匹配，而是大于等于当前需求大小nb的最小值。同时外层的循环的必要性是为了在最后对fastbin进行合并后，重新寻找适合的chunk。（至多循环一次）。
 
-### 2）使用last\_remainder进行分配 ###
+<pre class="prettyprint lang-javascript">
     while ((victim = unsorted_chunks (av)->bk) != unsorted_chunks (av))
     {
 		bck = victim->bk;
-      	if (__builtin_expect (chunksize_nomask (victim) <= 2 * SIZE_SZ, 0)
-      		|| __builtin_expect (chunksize_nomask (victim)
-    				   > av->system_mem, 0))
-    		malloc_printerr ("malloc(): memory corruption");
-首先获取当前unsorted\_bin中最先加入的chunk，对其大小进行检查，看是否符合规范。
+		if (__builtin_expect (chunksize_nomask (victim) <= 2 * SIZE_SZ, 0)
+      		|| __builtin_expect (chunksize_nomask (victim) > av->system_mem, 0))
+			malloc_printerr ("malloc(): memory corruption");
+		//首先获取当前unsorted\_bin中最先加入的chunk，对其大小进行检查，看是否符合规范。
+		
+		size = chunksize (victim);
+		/*
+		If a small request, try to use last remainder if it is the
+		only chunk in unsorted bin.  This helps promote locality for
+		runs of consecutive small requests. This is the only
+		exception to best-fit, and applies only when there is
+		no exact fit for a small chunk.
+		*/
+</pre>
 
-      	size = chunksize (victim);
-    	/*
-     	If a small request, try to use last remainder if it is the
-     	only chunk in unsorted bin.  This helps promote locality for
-     	runs of consecutive small requests. This is the only
-     	exception to best-fit, and applies only when there is
-     	no exact fit for a small chunk.
-       	*/
+### 2）使用last\_remainder进行分配 ###
 如果当前申请chunk大小在smallbin范围内（即32bit小于512byte，64bit小于1024byte），且unsorted\_bin中只有一个chunk就为last\_remainder，同时满足该chunk的大小大于申请大小（nb）加上最小chunk的大小（32bit为0x10,64bit为0x20）。
-
-    	if (in_smallbin_range (nb) &&
-      		bck == unsorted_chunks (av) &&
-      		victim == av->last_remainder &&
-      		(unsigned long) (size) > (unsigned long) (nb + MINSIZE))
-    	{
-      		/* split and reattach remainder */
-      		remainder_size = size - nb;
-      		remainder = chunk_at_offset (victim, nb);
-      		unsorted_chunks (av)->bk = unsorted_chunks (av)->fd = remainder;
-      		av->last_remainder = remainder;
-      		remainder->bk = remainder->fd = unsorted_chunks (av);
-然后将切分后剩余大小的chunk放入unsorted\_bin中，并修改对应chunk的fd和bk指针。
-
-      		if (!in_smallbin_range (remainder_size))
-    		{
-      			remainder->fd_nextsize = NULL;
-      			remainder->bk_nextsize = NULL;
-    		}
+<pre class="prettyprint lang-javascript">
+		if (in_smallbin_range (nb) && bck == unsorted_chunks (av) &&
+			victim == av->last_remainder && (unsigned long) (size) > (unsigned long) (nb + MINSIZE))
+		{
+			/* split and reattach remainder */
+			remainder_size = size - nb;
+			remainder = chunk_at_offset (victim, nb);
+			unsorted_chunks (av)->bk = unsorted_chunks (av)->fd = remainder;
+			av->last_remainder = remainder;
+			remainder->bk = remainder->fd = unsorted_chunks (av);
+			//然后将切分后剩余大小的chunk放入unsorted\_bin中，并修改对应chunk的fd和bk指针。
+		
+			if (!in_smallbin_range (remainder_size))
+			{
+				remainder->fd_nextsize = NULL;
+				remainder->bk_nextsize = NULL;
+			}
 			//如果剩余chunk size大于smallbin范围，对其fd_nextsize和bk_nextsize指针进行清0
-    		set_head (victim, nb | PREV_INUSE | (av != &main_arena ? NON_MAIN_ARENA : 0));
-      		set_head (remainder, remainder_size | PREV_INUSE);
-      		set_foot (remainder, remainder_size);
+			set_head (victim, nb | PREV_INUSE | (av != &main_arena ? NON_MAIN_ARENA : 0));
+			set_head (remainder, remainder_size | PREV_INUSE);
+			set_foot (remainder, remainder_size);
 			//对victime chunk和remainder chunk的size字段进行修改
-    		check_malloced_chunk (av, victim, nb);
-      		void *p = chunk2mem (victim);
-      		alloc_perturb (p, bytes);
-      		return p;
-    	}
+			check_malloced_chunk (av, victim, nb);
+			void *p = chunk2mem (victim);
+			alloc_perturb (p, bytes);
+			return p;
+		}
+</pre>
 然后对分配的victim chunk进行检查后，返回victim。
 
 ### 3）对unsorted\_bin中的chunk进行整理 ###
 
-     	/* remove from unsorted list */
-      	unsorted_chunks (av)->bk = bck;
-      	bck->fd = unsorted_chunks (av);
+一种特殊情况，如果victim chunk的size大小正好满足申请size（nb），则对victim chunk进行一系列初始化及检查后返回该chunk。  
+<pre class="prettyprint lang-javascript">
+		/* remove from unsorted list */
+		unsorted_chunks (av)->bk = bck;
+		bck->fd = unsorted_chunks (av);
 		//把victim从unsorted_bin链表上取下
-    	/* Take now instead of binning if exact fit */
-    	if (size == nb)
-    	{
+		
+		/* Take now instead of binning if exact fit */
+		if (size == nb)
+		{
       		set_inuse_bit_at_offset (victim, size);
       		if (av != &main_arena)
     			set_non_main_arena (victim);
@@ -651,11 +661,11 @@ else
 			alloc_perturb (p, bytes);
 			return p;
 		}
-一种特殊情况，如果victim chunk的size大小正好满足申请size（nb），则对victim chunk进行一系列初始化及检查后返回该chunk。  
-
+</pre>
 **注：这里其实也就是对smallbin的分配时机。因为smallbin是严格按照0x10大小递增的，因此如果不存在一个chunk的大小刚好满足申请大小，则肯定也能推出整理后的smallbin中不存在chunk满足分配**
 
 #### 3.1） 对smallbin chunk进行整理 ####
+<pre class="prettyprint lang-javascript">
 		/* place chunk in bin */
 		if (in_smallbin_range (size))
 		{
@@ -670,24 +680,33 @@ else
 		victim->fd = fwd;
 		fwd->bk = victim;
 		bck->fd = victim;
+</pre>
 如果victim size在smallbin的范围内，将victim chunk加入到对应的smallbin中，然后调用mark\_bin()函数。mark\_bin()函数的作用为标记对应的bin不为空，其定义如下所示。  
+<pre class="prettyprint lang-javascript">
+#define BINMAPSHIFT      5
+#define BITSPERMAP       (1U << BINMAPSHIFT)
+#define BINMAPSIZE       (NBINS / BITSPERMAP)
+#define idx2block(i)     ((i) >> BINMAPSHIFT)
+#define idx2bit(i)       ((1U << ((i) & ((1U << BINMAPSHIFT) - 1))))
 
-	#define BINMAPSHIFT      5
-	#define BITSPERMAP       (1U << BINMAPSHIFT)
-	#define BINMAPSIZE       (NBINS / BITSPERMAP)
-	#define idx2block(i)     ((i) >> BINMAPSHIFT)
-	#define idx2bit(i)       ((1U << ((i) & ((1U << BINMAPSHIFT) - 1))))
-    
-	#define mark_bin(m, i)		((m)->binmap[idx2block (i)] |= idx2bit (i))
-	//malloc_state的binmap字段为一个unsigned int型数组，该数组总共包含4个元素，刚好为128bit。
-	//用来表示对应的bins指针数组对应链表是否为空
-
+#define mark_bin(m, i)		((m)->binmap[idx2block (i)] |= idx2bit (i))
+//malloc_state的binmap字段为一个unsigned int型数组，该数组总共包含4个元素，刚好为128bit。
+//用来表示对应的bins指针数组对应链表是否为空
+</pre>
 #### 3.2） 对largebin chunk进行整理 ####
 如果victim size不在smallbin范围内，则将其加入对应的largebin链表中，并维持同一个largbin链表中chunk大小的有序性（从大到小的顺序）。在这里需要注意的一点是，fd\_nextsize和bk\_nextsize两个指针的含义，这两个指针用来链接在同一个largebin链表中不同size的chunk，这一个链表也是有序的，顺序也是从大到小。  
-即假设存在5个chunk，A0,A1,A2,B0,C0（其中A0=A1=A2，C0>B0>A0）  
-则由fd、bk组成的链表为：C0 || B0 || A0 || A1 || A2  
-有fd\_nextsize、bk\_nextsize组成链表为：C0 || B0 || A0
 
+即假设存在5个chunk，A0,A1,A2,B0,C0（其中A0=A1=A2，C0>B0>A0），且加入顺序为A0，A1，A2，B0，C0  
+
+则由fd、bk组成的链表为：  
+Largebin[x]:
+fd = C0		bk = A0  
+A0:  
+fd = 
+
+C0 || B0 || A0 || A1 || A2  
+有fd\_nextsize、bk\_nextsize组成链表为：C0 || B0 || A0
+<pre class="prettyprint lang-javascript">
 		else
 		{
 			victim_index = largebin_index (size);
@@ -742,46 +761,50 @@ else
 		bck->fd = victim;
 		
 		#define MAX_ITERS       10000
-          if (++iters >= MAX_ITERS)
-            break;
-        }
-		//如果累计处理的unsorted_bin中chunk大于10000个，则退出，避免浪费过多时间
+		if (++iters >= MAX_ITERS)
+			break;
+	}
+	//如果累计处理的unsorted_bin中chunk大于10000个，则退出，避免浪费过多时间
+</pre>
 
 #### 3.3） 尝试使用当前largebin链表进行分配 ####
-**即本次分配主要是在nb大小所对应的largebin链表中尝试进行分配，之所以要有此步骤是因为同一个largebin链表中的chunk size是不同的，这一点与smallbin不相同**  
 
-当把unsorted\_bin中的chunk都移动到smallbin或largebin中后，如果当前请求大小大于1024（不在smallbin范围内），则使用对应的largebin链表进行分配，遍历largebin链表寻找满足分配size（nb）的最小的chunk。由于相同size的chunk不链入fd\_nextsize,bk\_nextsize组成的链表中，因此如果找到的满足条件的chunk，其在fd,bk组成的链表中还有相同大小的chunk，则取位置第二的chunk，避免破坏fd\_nextsize,bk\_nextsize组成的链表。
+**本次分配主要是在nb大小所对应的largebin链表中尝试进行分配，之所以要有此步骤是因为同一个largebin链表中的chunk size是不同的，这一点与smallbin不相同**  
+
+当把unsorted\_bin中的chunk都移动到smallbin或largebin中后，如果当前请求大小大于1024（不在smallbin范围内），则使用对应的largebin链表进行分配，遍历largebin链表寻找满足分配size（nb）的最小的chunk。由于相同size的chunk不链入fd\_nextsize，bk\_nextsize组成的链表中，因此如果找到的满足条件的chunk，其在fd,bk组成的链表中还有相同大小的chunk，则取位置第二的chunk，避免破坏fd\_nextsize,bk\_nextsize组成的链表。
+<pre class="prettyprint lang-javascript">	
+	/*
+	If a large request, scan through the chunks of current bin in
+	sorted order to find smallest that fits.  Use the skip list for this.
+	*/
 	
-		/*
-    	If a large request, scan through the chunks of current bin in
-    	sorted order to find smallest that fits.  Use the skip list for this.
-       	*/
-    
-      	if (!in_smallbin_range (nb))
-    	{
-      		bin = bin_at (av, idx);
-    		/* skip scan if empty or largest chunk is too small */
-      		if ((victim = first (bin)) != bin && (unsigned long) chunksize_nomask (victim) >= (unsigned long)(nb))
-    		{
-      			victim = victim->bk_nextsize;
-      			while (((unsigned long) (size = chunksize (victim)) < (unsigned long) (nb)))
-    				victim = victim->bk_nextsize;
-    			/* Avoid removing the first entry for a size so that the skip
-     			list does not have to be rerouted.  */
-      			if (victim != last (bin) && chunksize_nomask (victim) == chunksize_nomask (victim->fd))
-    				victim = victim->fd;
-				//避免破坏fd_nextsize,bk_nextsize组成的链表
-    			remainder_size = size - nb;
-      			unlink (av, victim, bck, fwd);
-    			/* Exhaust */
-      			if (remainder_size < MINSIZE)
-    			{
-      				set_inuse_bit_at_offset (victim, size);
-      				if (av != &main_arena)
-    					set_non_main_arena (victim);
-					//如果剩余chunk大小小于最小的chunk size值（32bit：0x10，64bit：0x20），则将该chunk都分配给申请者
-    			}
-      			/* Split */
+	if (!in_smallbin_range (nb))
+	{
+		bin = bin_at (av, idx);
+		/* skip scan if empty or largest chunk is too small */
+		if ((victim = first (bin)) != bin && (unsigned long) chunksize_nomask (victim) >= (unsigned long)(nb))
+		{
+			victim = victim->bk_nextsize;
+			while (((unsigned long) (size = chunksize (victim)) < (unsigned long) (nb)))
+				victim = victim->bk_nextsize;
+			/* Avoid removing the first entry for a size so that the skip 
+			list does not have to be rerouted.  */
+			if (victim != last (bin) && chunksize_nomask (victim) == chunksize_nomask (victim->fd))
+				victim = victim->fd;
+			
+			//避免破坏fd_nextsize,bk_nextsize组成的链表
+			remainder_size = size - nb;
+			unlink (av, victim, bck, fwd);
+			
+			/* Exhaust */
+			if (remainder_size < MINSIZE)
+			{
+				set_inuse_bit_at_offset (victim, size);
+				if (av != &main_arena)
+					set_non_main_arena (victim);
+				//如果剩余chunk大小小于最小的chunk size值（32bit：0x10，64bit：0x20），则将该chunk都分配给申请者
+			}
+			/* Split */
 如果从largebin链表上取下的chunk size大于（nb+MINSIZE），则将剩余remainder chunk（从victim chunk中切下nb大小的空间）加入到unsorted\_bin链表中，并对victim chunk和remainder chunk进行初始化；否则返回整个chunk。
 
       			else
@@ -812,6 +835,7 @@ else
       			return p;
     		}
     	}
+</pre>
 #### 3.4） 遍历bin数组，寻找满足分配大小的chunk ####
 **如果程序运行到了这里，说明nb所对应的bin链表中（包括smallbin和largebin）没有满足分配条件的chunk，因此不得不在更大的bin中寻找满足条件的chunk**  
 
