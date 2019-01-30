@@ -1204,19 +1204,19 @@ int _IO_str_overflow (_IO_FILE *fp, int c)
 
     fp->_flags = 0
     fp->_IO_buf_base = 0
-    fp->_IO_buf_end = (bin_sh_addr - 100) / 2
+    fp->_IO_buf_end = (bin_sh_addr - 100) / 2		//如果之后替换的时one_gadget而不是system，则不用这一步
     fp->_IO_write_ptr = 0xffffffff
-    fp->_IO_write_base = 0
+    fp->_IO_write_base = 0			//实际就是_IO_write_ptr >_IO_write_base
     fp->_mode = 0
 此时，根据代码所示可以推导出如下等式：  
 old\_blen = \_IO\_blen(fp) = fp->\_IO\_buf\_end - \_IO\_buf\_base = \_IO\_buf\_end  
-new\_size = 2 * old\_blen +100 = 2*\_IO\_buf\_end + 100 = (bin\_sh\_addr - 100）/ 2 * 2 + 100 = bin\_sh\_addr  
+new\_size = 2 * old\_blen + 100 = 2*\_IO\_buf\_end + 100 = (bin\_sh\_addr - 100）/ 2 * 2 + 100 = bin\_sh\_addr  
 这样我们就布置好了system函数需要调用的参数，接下来就是如何控制程序执行流程了。
 
 我们注意到在\_IO\_str\_overflow函数中有这样一行代码
 
 	new_buf = (char *) (*((_IO_strfile *) fp)->_s._allocate_buffer) (new_size); 
-可以看到在该函数中有一个虚表调用，调用的函数地址为相对fp偏移0xe0（64bit）的\_allocate\_buffer函数，如果我们把该地址的内容替换为system函数，不就可以劫持程序控制流了吗？确实如此！我们只要在fp+0xe0的位置放置system函数的指针即可劫持控制流。  
+可以看到在该函数中有一个虚表调用，调用的函数地址为相对fp偏移0xe0（64bit）的\_allocate\_buffer函数，如果我们把该地址的内容替换为system函数，不就可以劫持程序控制流了吗？确实如此！我们只要在fp+0xe0（也就是紧跟在虚表后的地址）的位置放置system函数（或者one\_gadget）的指针即可劫持控制流。  
 **有一点要注意的是，如果 bin\_sh\_addr 的地址以奇数结尾，为了避免除法向下取整的干扰，可以将该地址加 1。另外 system("/bin/sh") 是可以用 one\_gadget 来代替的，这样似乎更加简单。**
 
 利用\_IO\_str\_overflow的完成调用过程（还有其他的利用路径，本文只列出了针对malloc\_printerr的情况）：
