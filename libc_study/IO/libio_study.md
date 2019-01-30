@@ -1242,9 +1242,10 @@ void _IO_str_finish (_IO_FILE *fp, int dummy)
 
 所以可以像下面这样构造：
 
+	fp->_flag = 0
     fp->_mode = 0
     fp->_IO_write_ptr = 0xffffffff
-    fp->_IO_write_base = 0
+    fp->_IO_write_base = 0		//_IO_write_ptr > _IO_write_base 即可
     fp->_IO_buf_base = bin_sh_addr
 
 完整的调用过程：
