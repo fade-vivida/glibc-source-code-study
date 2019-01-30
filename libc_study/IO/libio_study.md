@@ -1185,17 +1185,18 @@ int _IO_str_overflow (_IO_FILE *fp, int c)
   pos = fp->_IO_write_ptr - fp->_IO_write_base;
   if (pos >= (_IO_size_t) (_IO_blen (fp) + flush_only))  // 条件 #define _IO_blen(fp) ((fp)->_IO_buf_end - (fp)->_IO_buf_base)
   {
-      if (fp->_flags & _IO_USER_BUF) /* not allowed to enlarge */
+	if (fp->_flags & _IO_USER_BUF) /* not allowed to enlarge */
+		return EOF;
+	else
+	{
+		char *new_buf;
+		char *old_buf = fp->_IO_buf_base;
+		size_t old_blen = _IO_blen (fp);
+		_IO_size_t new_size = 2 * old_blen + 100;      // 通过计算 new_size 为 "/bin/sh\x00" 的地址
+		if (new_size < old_blen)
 			return EOF;
-      else
-	  {
-			char *new_buf;
-	  		char *old_buf = fp->_IO_buf_base;
-	  		size_t old_blen = _IO_blen (fp);
-	  		_IO_size_t new_size = 2 * old_blen + 100;      // 通过计算 new_size 为 "/bin/sh\x00" 的地址
-	  		if (new_size < old_blen)
-	    		return EOF;
-	  		new_buf = (char *) (*((_IO_strfile *) fp)->_s._allocate_buffer) (new_size);     // 在这个相对地址放上 system 的地址，即 system("/bin/sh")
+		new_buf = (char *) (*((_IO_strfile *) fp)->_s._allocate_buffer) (new_size);     
+		// 在这个相对地址放上 system 的地址，即 system("/bin/sh")
     [...]
 </pre>
 因此我们可以下面的方式对fp指针进行构造：
