@@ -942,7 +942,8 @@ def pack_file_64(_flags = 0,
               _IO_marker = 0,
               _IO_chain = 0,
               _fileno = 0,
-              _lock = 0):
+              _lock = 0,
+              _mode = 0):
     struct = p64(_flags) + \
              p64(_IO_read_ptr) + \
              p64(_IO_read_end) + \
@@ -960,6 +961,8 @@ def pack_file_64(_flags = 0,
              p32(_fileno)
     struct = struct.ljust(0x88, "\x00")
     struct += p64(_lock)
+    struct = struct.ljust(0xc0,"\x00")
+    struct += p64(_mode)
     struct = struct.ljust(0xd8, "\x00")
     return struct
 </pre>
