@@ -1004,6 +1004,10 @@ for (;; )
     	}
     }
 	}
+## 7.remalloc分配机制 ##
+remalloc分配时，如果请求chunk大小小于原chunk大小，则对该chunk进行切割后，将剩余chunk进行free。  
+
+例题：CISCN 2018 supermarket
     
 
 
