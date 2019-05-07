@@ -727,7 +727,7 @@ _IO_size_t _IO_new_file_xsputn (_IO_FILE *f, const void *data, _IO_size_t n)
 	{
 		_IO_size_t block_size, do_write;
 		/* Next flush the (full) buffer. */
-		if (<a href = "#9">_IO_OVERFLOW (f, EOF)</a> == EOF)
+		if (<a href = "#19">_IO_OVERFLOW (f, EOF)</a> == EOF)
 		/* If nothing else has to be written we must not signal the caller that everything has been written.  */
 			return to_do == 0 ? EOF : n - to_do;
 		
@@ -754,7 +754,7 @@ _IO_size_t _IO_new_file_xsputn (_IO_FILE *f, const void *data, _IO_size_t n)
 libc_hidden_ver (_IO_new_file_xsputn, _IO_file_xsputn)
 </pre>
 
-<a name = "9"></a>
+<a name = "19"></a>
 ## 3.2 \_IO\_new\_file\_overflow函数 ##
 该函数功能为：对当前文件流的写缓存进行刷新。具体逻辑流程如下所示：  
 1. 如果当前文件流不可写（\_IO\_NO\_WRITES 0x2），直接返回EOF  
