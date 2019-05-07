@@ -413,6 +413,9 @@ _IO_file_xsgetn (_IO_FILE *fp, void *data, _IO_size_t n)
 			if (fp->_IO_buf_base
 				&& want < (size_t) (fp->_IO_buf_end - fp->_IO_buf_base))
 			{
+				//关键点：如果当前缓冲区大小大于请求字节数（fp->_IO_buf_end - fp->_IO_buf_base > want)，
+				//那么就先调用underflow函数读入（buff size大小的数据）到缓冲区中，然后再次循环后，
+				//使用memcpy函数复制实际请求大小。
 				if (<a href = "#9">__underflow (fp)</a> == EOF)
 					break;
 				
@@ -433,7 +436,7 @@ _IO_file_xsgetn (_IO_FILE *fp, void *data, _IO_size_t n)
 				if (block_size >= 128)
 					count -= want % block_size;
 			}
-			
+			//否则，直接将数据读入到目标buff中（考虑对齐）
 			count = _IO_SYSREAD (fp, s, count);
 			if (count <= 0)
 			{
@@ -536,7 +539,8 @@ int _IO_new_file_underflow (_IO_FILE *fp)
 	}
 	
 	<a href = "#10">_IO_switch_to_get_mode (fp);</a>
-	
+	//对于可读可写的文件流，在读入数据前要先确保其写入内容都已完成写入
+
 	/* This is very tricky. We have to adjust those
 	pointers before we call _IO_SYSREAD () since
 	we may longjump () out while waiting for
@@ -546,6 +550,7 @@ int _IO_new_file_underflow (_IO_FILE *fp)
 	fp->_IO_write_base = fp->_IO_write_ptr = fp->_IO_write_end = fp->_IO_buf_base;
 	
 	count = _IO_SYSREAD (fp, fp->_IO_buf_base,fp->_IO_buf_end - fp->_IO_buf_base);
+	//向缓冲区buff中读入数据
 	if (count <= 0)
 	{
 		if (count == 0)
