@@ -718,7 +718,7 @@ _IO_size_t _IO_new_file_xsputn (_IO_FILE *f, const void *data, _IO_size_t n)
 			f->_IO_write_ptr = __mempcpy (f->_IO_write_ptr, s, count);
 		#else
 			memcpy (f->_IO_write_ptr, s, count);
-			f->_IO_write_ptr += count;
+		f->_IO_write_ptr += count;
 		#endif
 		s += count;
 		to_do -= count;
