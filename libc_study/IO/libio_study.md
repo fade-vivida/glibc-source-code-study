@@ -759,6 +759,9 @@ libc_hidden_ver (_IO_new_file_xsputn, _IO_file_xsputn)
 该函数功能为：对当前文件流的写缓存进行刷新。具体逻辑流程如下所示：  
 1. 如果当前文件流不可写（\_IO\_NO\_WRITES 0x2），直接返回EOF  
 2. 如果当前文件流为读模式或者写缓冲为空，则分配新的流缓冲区并调整read buff的位置  
+
+**该函数经常会在无leak的heap利用题目中使用，我们通过修改IO\_write\_ptr的值，使其减去\IO\_write\_base的值为一个很大的值，从而打印出很多libc的信息。**
+
 <pre class = "prettyprint lang-javascript">
 _IO_new_file_overflow (_IO_FILE *f, int ch)
 {
@@ -771,6 +774,7 @@ _IO_new_file_overflow (_IO_FILE *f, int ch)
 	/* If currently reading or no buffer allocated. */
 	if ((f->_flags & _IO_CURRENTLY_PUTTING) == 0 || f->_IO_write_base == NULL)
 	{
+		//通过置f->_flags为0x1000，从而绕过该检查。
 		/* Allocate a buffer if needed. */
 		if (f->_IO_write_base == NULL)
 		{
@@ -806,6 +810,7 @@ _IO_new_file_overflow (_IO_FILE *f, int ch)
 	}
 	if (ch == EOF)
 		return <a href = "#11">_IO_do_write (f, f->_IO_write_base,f->_IO_write_ptr - f->_IO_write_base);</a>
+		//能够进行信息泄露的关键点，经常在无leak的堆题中出现。
 	if (f->_IO_write_ptr == f->_IO_buf_end ) /* Buffer is really full */
 		if (_IO_do_flush (f) == EOF)
 			return EOF;
