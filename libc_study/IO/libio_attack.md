@@ -213,12 +213,13 @@ _IO_vtable_check (void)
 ### 3.1 改写\_dl\_open\_hook ###
 该方法已在2中进行了表述，其实就是通过其他漏洞改写了dl\_open\_hook后，在按无检查的时候利用即可。
 ### 3.2 利用\_IO\_str\_jumps ###
+**注：重要！重要！重要！ glibc2.28 之后不会再调用 allocate_buff 和 free_buff 这两个函数指针，也就是说无法再利用 _IO_str_jumps 函数做文章了。**
+
 由于在新的检测机制下，会检查虚表的地址是否在规定的合法范围内，因此我们无法再伪造vtable结构。既然无法将 vtable 指针指向 \_\_libc\_IO\_vtables 以外的地方，那么就在 \_\_libc\_IO\_vtables 里面找些有用的东西。比如 \_IO\_str\_jumps（该符号在strip后会丢失），但我们可以根据\_IO\_file\_jumps以及相对偏移（一般来说为0xc0，但具体使用时还需要视情况而定）来计算它的相对位置。
 
 下面是\_IO\_str\_jumps虚表结构体的相关成员
 <pre class = "prettyprint lang-javascript">
 // libio/strops.c
-
 #define JUMP_INIT_DUMMY JUMP_INIT(dummy, 0), JUMP_INIT (dummy2, 0)
 
 const struct _IO_jump_t _IO_str_jumps libio_vtable =
@@ -246,6 +247,7 @@ const struct _IO_jump_t _IO_str_jumps libio_vtable =
 };
 </pre>
 \_IO\_strfile结构体
+
 <pre class = "prettyprint lang-javascript">
 struct _IO_str_fields
 {
