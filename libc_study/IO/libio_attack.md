@@ -2,6 +2,18 @@
 
 **注：重要！重要！重要！ glibc2.28 之后不会再调用 allocate_buff 和 free_buff 这两个函数指针，也就是说无法再利用 _IO_str_jumps 函数做文章了。**
 
+
+
+**exit 调用到 _IO_flush_all_lockp 的路径为（libc2.29）：**
+
+1. **__run_exit_handlers**
+2. **__call_tls_dtors**，在该函数中通过虚表指针调用 fcloseall
+3. **__fcloseall**
+4. **_IO_cleanup**
+5. **_IO_flush_all_lockp** 
+
+
+
 FSOP（File Stream Oriented Programming）是一种劫持\_IO\_list\_all（libc中全局变量）的方法。通过伪造的\_IO\_FILE\_plus结构体并修改\_IO\_list\_all链表使其指向伪造的\_IO\_FILE\_plus结构体。然后通过调用\_IO\_flush\_all\_lockp函数来调用伪造的vtable函数列表中的函数（\_IO\_overflow）指针，达到控制程序流的目的。  
 
 伪造\_IO\_FILE结构体时的一个小技巧：  
@@ -54,8 +66,10 @@ def pack_file_64(_flags = 0,
 1. 当发生内存错误的时候（此时会调用malloc\_printerr函数）  
 2. 在执行exit函数时  
 3. main函数返回时  
+
 这里给出当libc检测到内存错误时该函数的调用路径：  
 malloc\_printerr -> libc\_message -> abort（\_GI\_abort与abort强链接） -> fflush（\_IO\_flush\_all\_lockp的宏定义) -> \_IO\_flush\_all\_lockp
+
 <pre class="prettyprint lang-javascript"> 
 int _IO_flush_all_lockp (int do_lock)
 {
@@ -461,7 +475,6 @@ void _IO_wstr_finish (_IO_FILE *fp, int dummy)
   if (fp->_wide_data->_IO_buf_base && !(fp->_flags2 & _IO_FLAGS2_USER_WBUF))    // 条件
     (((_IO_strfile *) fp)->_s._free_buffer) (fp->_wide_data->_IO_buf_base);     // 在这个相对地址放上 system 的地址
   fp->_wide_data->_IO_buf_base = NULL;
-
   _IO_wdefault_finish (fp, 0);
 }
 </pre>
