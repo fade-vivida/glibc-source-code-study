@@ -422,7 +422,39 @@ _IO_wint_t _IO_wstr_overflow (_IO_FILE *fp, _IO_wint_t c)
 </pre>
 其他的都没有发生变化，唯一需要注意的就是其中条件判断的字段都变为了fp->\_wide_data字段。  
 
+_IO_wide_data 字段的定义如下所示：
+
+```c++
+struct _IO_wide_data
+{
+  wchar_t *_IO_read_ptr;	/* Current read pointer */
+  wchar_t *_IO_read_end;	/* End of get area. */
+  wchar_t *_IO_read_base;	/* Start of putback+get area. */
+  wchar_t *_IO_write_base;	/* Start of put area. */
+  wchar_t *_IO_write_ptr;	/* Current put pointer. */
+  wchar_t *_IO_write_end;	/* End of put area. */
+  wchar_t *_IO_buf_base;	/* Start of reserve area. */
+  wchar_t *_IO_buf_end;		/* End of reserve area. */
+  /* The following fields are used to support backing up and undo. */
+  wchar_t *_IO_save_base;	/* Pointer to start of non-current get area. */
+  wchar_t *_IO_backup_base;	/* Pointer to first valid character of
+				   backup area */
+  wchar_t *_IO_save_end;	/* Pointer to end of non-current get area. */
+
+  __mbstate_t _IO_state;
+  __mbstate_t _IO_last_state;
+  struct _IO_codecvt _codecvt;
+
+  wchar_t _shortbuf[1];
+
+  const struct _IO_jump_t *_wide_vtable;
+};
+```
+
+
+
 利用函数 \_IO\_wstr\_finish：
+
 <pre class = "prettyprint lang-javascript">
 void _IO_wstr_finish (_IO_FILE *fp, int dummy)
 {
