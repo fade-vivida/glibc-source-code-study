@@ -152,7 +152,7 @@ int _IO_flush_all_lockp (int do_lock)
 那么如何才能保证即触发 `unsortedbin attack` 修改 `_IO_list_all`，又能修改在 0x60 的 `smallbin` 中放入一个预先布置好的堆块呢？ 
 **方法就是**：在修改 `unsortedbin->bk` 字段的同时，修改 `unsortedbin->size` 字段为 0x61，然后再分配一个大于 0x60 的 `chunk`。这样由于 `unsortedbin` 的分配机制，请求的 size 大小不等于当前 `unsortedbin` 中的 `chunk`，会将该 `chunk`先扔进对应的 `smallbin`，继续遍历 `unsortedbin`。 
 
-![check2](../picture\check2.png)
+![check2](../picture/check2.png)
 
 其实此时还绕过了另一个检查，由于`bck != unsorted_chunks (av)`，导致该 `unsortedbin` 不会切割分配。 
 
