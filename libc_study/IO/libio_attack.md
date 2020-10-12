@@ -1,8 +1,8 @@
 # FILE_IO 攻击技术解析 #
 
+## 1. 重要更新
+
 **注：重要！重要！重要！ glibc2.28 之后不会再调用 allocate_buff 和 free_buff 这两个函数指针，也就是说无法再利用 _IO_str_jumps 函数做文章了。**
-
-
 
 **exit 调用到 _IO_flush_all_lockp 的路径为（libc2.29）：**
 
@@ -12,13 +12,15 @@
 4. **_IO_cleanup**
 5. **_IO_flush_all_lockp** 
 
+## 2. 什么是 FSOP
 
+**FSOP** 是（File Stream Oriented Programming）的缩写，根据前面对 FILE 的介绍得知进程内所有的 `_IO_FILE` 结构会使用 `_chain` 域相互连接形成一个链表，这个链表的头部由 `_IO_list_all` 全局变量维护。
 
-FSOP（File Stream Oriented Programming）是一种劫持\_IO\_list\_all（libc中全局变量）的方法。通过伪造的\_IO\_FILE\_plus结构体并修改\_IO\_list\_all链表使其指向伪造的\_IO\_FILE\_plus结构体。然后通过调用\_IO\_flush\_all\_lockp函数来调用伪造的vtable函数列表中的函数（\_IO\_overflow）指针，达到控制程序流的目的。  
+**FSOP** 的核心思想就是劫持 `_IO_list_all` 的值来伪造链表和其中的 `_IO_FILE` 项，但是单纯的伪造只是构造了数据还需要某种方法进行触发。FSOP 选择的触发方法是调用 `_IO_flush_all_lockp()`，这个函数会刷新 `_IO_list_all` 链表中所有项的文件流，相当于对每个 FILE 调用 fflush，也对应着会调用`_IO_FILE_plus.vtable` 中的 `_IO_overflow()` 函数指针。
 
-伪造\_IO\_FILE结构体时的一个小技巧：  
-定义一个结构体，然后填充各个字段的内容即可。
-<pre class = "prettyprint lang-javascript">
+使用 python 伪造 `_IO_FILE` 结构体时的一个小技巧：可以通过定义一个结构体，然后填充各个字段的内容。
+
+```python
 def pack_file_64(_flags = 0,
               _IO_read_ptr = 0,
               _IO_read_end = 0,
@@ -57,20 +59,27 @@ def pack_file_64(_flags = 0,
     struct += p64(_mode)
     struct = struct.ljust(0xd8, "\x00")
     return struct
-</pre>
+```
 
-## 1. libc2.24之前版本的利用方法 ##
-在libc2.24之前没有对vtable合法性的检验，因此可以将vtable伪造在任意可以控制的地方（常见利用方法为在堆上伪造该虚表）。  
 
-\_IO\_flush\_all\_lockp函数会在以下3中情况下被调用：  
-1. 当发生内存错误的时候（此时会调用malloc\_printerr函数）  
-2. 在执行exit函数时  
-3. main函数返回时  
 
-这里给出当libc检测到内存错误时该函数的调用路径：  
-malloc\_printerr -> libc\_message -> abort（\_GI\_abort与abort强链接） -> fflush（\_IO\_flush\_all\_lockp的宏定义) -> \_IO\_flush\_all\_lockp
 
-<pre class="prettyprint lang-javascript"> 
+## 3. libc 2.24 及之前版本的利用方法 ##
+在 libc2.24 之前没有对 `vtable` 合法性的检验，因此可以将 `vtable` 伪造在任意可以控制的地方（常见利用方法为在堆上伪造该虚表）。  
+
+`_IO_flush_all_lockp()` 函数会在以下3中情况下被调用：  
+
+1. 当发生内存错误的时候（此时会调用 `malloc_printerr()` 函数）  
+2. 在执行 `exit` 函数时  
+3. `main` 函数正常返回时（其实之后也会执行 exit）  
+
+这里给出当 libc 检测到内存错误时该函数的调用路径： 
+
+`malloc_printerr -> libc_message -> abort（_GI_abort与abort强链接） -> fflush（_IO_flush_all_lockp的宏定义) -> _IO_flush_all_lockp`
+
+### 3.1 _IO_flush_all_lockp()
+
+```c++
 int _IO_flush_all_lockp (int do_lock)
 {
 	int result = 0;
@@ -89,45 +98,48 @@ int _IO_flush_all_lockp (int do_lock)
 		if (do_lock)
 			_IO_flockfile (fp);
 		if (((fp->_mode <= 0 && fp->_IO_write_ptr > fp->_IO_write_base)		
-		//fp->_mode<0表示使用字节流模式，fp->_mode=0表示当前模式未指定，这里是一个很重要的判断条件，在下文会有说明
+			// fp->_mode<0 表示使用字节流模式，fp->_mode=0 表示当前模式未指定，fp->_mode>0 表示使用宽字节流。
+            // 这里是一个很重要的判断条件，在下文会有说明
 			#if defined _LIBC || defined _GLIBCPP_USE_WCHAR_T
 				|| (_IO_vtable_offset (fp) == 0
 				&& fp->_mode > 0 && (fp->_wide_data->_IO_write_ptr > fp->_wide_data->_IO_write_base))
 			#endif
-			) && _IO_OVERFLOW (fp, EOF) == EOF)		//调用vtable函数列表中的\_\_overflow函数
+			) && _IO_OVERFLOW (fp, EOF) == EOF)		//调用 vtable 函数列表中的 _IO_overflow 函数
 			result = EOF;
 		if (do_lock)
 			_IO_funlockfile (fp);
 		run_fp = NULL;
-
-		if (last_stamp != _IO_list_all_stamp)
-		{
-			/* Something was added to the list.  Start all over again.  */
-			fp = (_IO_FILE *) _IO_list_all;
-			last_stamp = _IO_list_all_stamp;
-		}
-		else
-			fp = fp->_chain;
+        if (last_stamp != _IO_list_all_stamp)
+        {
+            /* Something was added to the list.  Start all over again.  */
+            fp = (_IO_FILE *) _IO_list_all;
+            last_stamp = _IO_list_all_stamp;
+        }
+        else
+            fp = fp->_chain;
 	}
-	#ifdef _IO_MTSAFE_IO
-		if (do_lock)
-			_IO_lock_unlock (list_all_lock);
-		__libc_cleanup_region_end (0);
-	#endif
+#ifdef _IO_MTSAFE_IO
+	if (do_lock)
+		_IO_lock_unlock (list_all_lock);
+	__libc_cleanup_region_end (0);
+#endif
 	return result;
 }
-</pre>
-触发\_\_overflow函数的条件（任选其一即可）：
+```
 
-	1. fp -> _mode <= 0  //表示使用字节流
-	2. fp -> _IO_write_ptr > fp -> _IO_write_base	//表示还有数据没有写入内核缓冲区  
+### 3.2 触发 _IO_overflow
+
+触发 `_IO_overflow` 函数的条件（任选其一即可）：
+
+	1. fp->_mode <= 0  //表示使用字节流
+	2. fp->_IO_write_ptr > fp -> _IO_write_base	//表示还有数据没有写入内核缓冲区  
 或者满足  
 
-	1. fp -> _vtable_offset = 0  
-	2. fp -> _mode > 0  //表示使用宽字节流
-	3. fp -> _wide_data -> _IO_write_ptr > fp -> _wide_data -> _IO_write_base  
+	1. fp->_vtable_offset = 0  
+	2. fp->_mode > 0  //表示使用宽字节流
+	3. fp->_wide_data->_IO_write_ptr > fp->_wide_data->_IO_write_base  
 
-fp -> \_mode 字段是用来判断当前文件流指针是否使用了宽字节数据，fp -> \_mode < 0 表示使用字节流模式，因此接下来只需要判断\_IO\_write\_ptr 是否大于\_IO\_write\_base（是否还有数据没有写入）。如果fp -> \_mode >= 0 表示使用了宽字节流模式（或者当前模式未指定），此时需要检查是\_wide\_data结构体中是否还有未写入的数据，并且fp -> \_vtable\_offset字段必须为0。  
+`fp->_mode` 字段是用来判断当前文件流的类型，`fp->_mode < 0` 表示使用字节流模式，因此接下来只需要判断 `_IO_write_ptr` 是否大于`_IO_write_base`（是否还有数据没有写入）。如果 `fp->_mode >= 0` 表示使用了宽字节流模式（或者当前模式未指定），此时需要检查是 `_wide_data` 结构体中是否还有未写入的数据，并且 `fp->_vtable_offset` 字段必须为0。  
 
 这里有一点需要注意的地方就是，如何修改\_IO\_list\_all字段。如果有任意地址写任意值的漏洞，这自然不用说，将其改到一个我们可以直接控制的地址即可。还有一种情况在heap利用中较为常见，利用unsortedbin attack能达到任意地址写固定值（&main\_arena->topchunk），此时我们就要利用\_IO\_FILE的chain字段了。  
 
