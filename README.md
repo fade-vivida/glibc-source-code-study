@@ -1,2 +1,2 @@
-# libc-linux-source-code-study
-libc及linux源码学习
+# glibc-source-code-study
+glibc 源码学习
