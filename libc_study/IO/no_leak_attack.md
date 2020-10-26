@@ -81,7 +81,40 @@
 - `_IO_CURRENTLY_PUTTING`。
 - `_IO_LINE_BUF`
 
-至于这样宏常量是用来干什么的，我们后面再说
+至于这样宏常量是用来干什么的，我们后面再说。
+
+## 1.2 _IO_jump_t
+
+文件流的函数虚表结构体，`stdin`，`stdout`，`stderr` 三个文件流的虚表指针基本相同，我们这里以 `stdin` 为例
+
+其中的 `__read`，`__write`，`__close`，`__seek`，`__stat` 我们可以理解为就是标准的文件操作函数（我们可以把它理解为 Linux 的标准库函数）
+
+```c++
+pwndbg> p *(struct _IO_jump_t*)0x7f5b833f52a0
+$9 = {
+  __dummy = 0, 
+  __dummy2 = 0, 
+  __finish = 0x7f5b83099330 <_IO_new_file_finish>, 
+  __overflow = 0x7f5b8309a300 <_IO_new_file_overflow>, 
+  __underflow = 0x7f5b8309a020 <_IO_new_file_underflow>, 
+  __uflow = 0x7f5b8309b3c0 <__GI__IO_default_uflow>, 
+  __pbackfail = 0x7f5b8309cc50 <__GI__IO_default_pbackfail>, 
+  __xsputn = 0x7f5b83098930 <_IO_new_file_xsputn>, 
+  __xsgetn = 0x7f5b83098590 <__GI__IO_file_xsgetn>, 
+  __seekoff = 0x7f5b83097b90 <_IO_new_file_seekoff>, 
+  __seekpos = 0x7f5b8309b990 <_IO_default_seekpos>, 
+  __setbuf = 0x7f5b83097850 <_IO_new_file_setbuf>, 
+  __sync = 0x7f5b830976d0 <_IO_new_file_sync>, 
+  __doallocate = 0x7f5b8308b100 <__GI__IO_file_doallocate>, 
+  __read = 0x7f5b83098910 <__GI__IO_file_read>, 
+  __write = 0x7f5b83098190 <_IO_new_file_write>, 
+  __seek = 0x7f5b83097910 <__GI__IO_file_seek>, 
+  __close = 0x7f5b83097840 <__GI__IO_file_close>, 
+  __stat = 0x7f5b83098180 <__GI__IO_file_stat>, 
+  __showmanyc = 0x7f5b8309cdd0 <_IO_default_showmanyc>, 
+  __imbue = 0x7f5b8309cde0 <_IO_default_imbue>
+}
+```
 
 # 2. puts() 函数
 
@@ -210,7 +243,7 @@ libc_hidden_ver(_IO_new_file_xsputn, _IO_file_xsputn)
 2. 如果 `count > 0`，表示缓冲区中还有剩余空间，那么调用 `memcpy` 向缓冲区中拷贝一次数据（长度为 `min(to_do,count)`），并修正指向数据的指针 `s` 和数据长度 `to_do`。这里之所以修正是因为存在当前剩余空间大小小于数据长度的情况，即没有办法一次完全拷贝。
 3. 如果 `to_do + must_flush > 0`，也就是说要么遇到了行缓冲且输出数据中有换行符，要么当前缓冲区不足以容纳此次输出数据。无论是以上哪种情况，都需要进行一次流刷新处理（将数据写回内核），即调用 `_IO_OVERFLOW`。
 4. 如果 `_IO_OVERFLOW` 返回不为 `EOF`，那么说明此次刷新成功，当前缓冲区中的数据已被输出到对应设备中。那么此时我们需要考虑的就是剩余的数据应该怎么办？
-5. glibc 给出的解决方法为首先使用
+5. glibc 给出的解决方法为：首先计算当前缓冲区的大小（`block_size = _IO_buff_end - _IO_buf_base`），并计算当前写入数据模 `block_size` 后的值（可以理解为剩余数据）。然后调用 `_IO_new_do_write` 先将数据整块写回内核（`block_size` 的整数倍），再调用 `_IO_default_xsputn` 将剩余数据放入缓冲区。
 
 
 
@@ -261,7 +294,7 @@ libc_hidden_def(_IO_default_xsputn)
 
 ## 2.4 _IO_new_file_overflow()
 
-我们可以将该函数理解为如果输出缓冲区已满，那么就需要调用一次 `_IO_new_file_overflow()` 来对缓冲区进行刷新，将数据写回内核。
+我们可以将该函数理解为如果输出缓冲区已满（`_IO_write_ptr == _IO_write_end`）或者有必须要写回内核的条件发生（例如行缓冲流或无缓冲流），那么就需要调用一次 `_IO_new_file_overflow()` 来对缓冲区进行刷新，将数据写回内核。
 
 既然要写回内核，那么我们就需要函数能够走到后面 `_IO_do_write()` 的位置，因此我们就需要绕过一些验证条件。
 
@@ -306,8 +339,7 @@ int _IO_new_file_overflow (_IO_FILE *f, int ch)
 		}
 	
 		if (f->_IO_read_ptr == f->_IO_buf_end)
-			f->_IO_read_end = f->_IO_read_ptr = f->_IO_buf_base;
-		f->_IO_write_ptr = f->_IO_read_ptr;
+			f->_IO_read_end = f->_IO_read_ptr = f->_IO_buf_base; 
 		f->_IO_write_base = f->_IO_write_ptr;
 		f->_IO_write_end = f->_IO_buf_end;
 		f->_IO_read_base = f->_IO_read_ptr = f->_IO_read_end;
@@ -348,13 +380,15 @@ libc_hidden_ver (_IO_new_file_overflow, _IO_file_overflow)
   		    - (_f)->_wide_data->_IO_write_base)))
   ```
 
-  此时不难发现，就是根据当前文件流的模式（`_mode`），来判断是调用单字节流的写回函数 `_IO_do_write()`，还是宽字节流的写回函数 `_IO_wdo_write()`。
+  此时不难发现，就是根据当前文件流的模式（`_mode`），来判断是调用单字节流的写回函数 `_IO_do_write()`，还是宽字节流的写回函数 `_IO_wdo_write()`
 
 - 当 `f->_flags` 设置了 `_IO_UNBUFFERED` 标志（2），表明该文件流是无缓冲模式，需要立即将数据写回内核
 
-- 当 `f->_flags` 设置了 `_IO_LINE_BUF` 标志（0x200）且下一个要写入缓冲区的字节为 `\n`，表明该文件流为行缓冲且遇到了换行符，那么需要调用 `_IO_do_write()` 进行一次写回操作。
+- 当 `f->_flags` 设置了 `_IO_LINE_BUF` 标志（0x200）且下一个要写入缓冲区的字节为 `\n`，表明该文件流为行缓冲且遇到了换行符，那么需要调用 `_IO_do_write()` 进行一次写回操作
 
 ## 2.5 _IO_new_do_write()
+
+该函数的作用为将数据写回内核。
 
 ```c++
 int _IO_new_do_write(_IO_FILE *fp, const char *data, _IO_size_t to_do)
@@ -367,8 +401,6 @@ libc_hidden_ver(_IO_new_do_write, _IO_do_write)
 `_IO_new_do_write()` 函数是对 `new_do_write()` 函数的封装，我们直接来看 `new_do_write()` 函数
 
 ```c++
-
-
 static _IO_size_t new_do_write(_IO_FILE *fp, const char *data, _IO_size_t to_do)
 {
   _IO_size_t count;
@@ -386,7 +418,7 @@ static _IO_size_t new_do_write(_IO_FILE *fp, const char *data, _IO_size_t to_do)
       return 0;
     fp->_offset = new_pos;
   }
-  count = _IO_SYSWRITE(fp, data, to_do);
+  count = _IO_SYSWRITE(fp, data, to_do);	// the key func to leak info
   if (fp->_cur_column && count)
     fp->_cur_column = _IO_adjust_column(fp->_cur_column - 1, data, count) + 1;
   _IO_setg(fp, fp->_IO_buf_base, fp->_IO_buf_base, fp->_IO_buf_base);
@@ -398,3 +430,83 @@ static _IO_size_t new_do_write(_IO_FILE *fp, const char *data, _IO_size_t to_do)
 }
 ```
 
+如果我们想要进行信息泄露，这里有两个我们需要注意的地方。
+
+首先我们来看写回数据的关键点： `_IO_SYSWRITE`
+
+```c++
+count = _IO_SYSWRITE(fp, data, to_do)
+```
+
+结合对该函数的调用，可以得到 `data = f->_IO_write_base`，`to_do = f->_IO_write_ptr - f->_IO_write_base)`，也就是说从 `_IO_write_base` 开始，写 `_IO_write_ptr - _IO_write_base` 这么多的数据。那么如果我们想要进行信息泄露，就需要将 `_IO_write_base` 指向我们想要泄露信息的地址 `leak_addr`，然后使得 `_IO_write_ptr > _IO_write_base` ，那么我们就可以泄露 `leak_addr ~ _IO_write_ptr` 之间的数据了😊。
+
+**注：但事情并没有那么简单😫**
+
+我们看下面语句
+
+```c++
+if (fp->_flags & _IO_IS_APPENDING)
+    /* On a system without a proper O_APPEND implementation,
+    you would need to sys_seek(0, SEEK_END) here, but is
+    not needed nor desirable for Unix- or Posix-like systems.
+    Instead, just indicate that offset (before and after) is
+    unpredictable. */
+    fp->_offset = _IO_pos_BAD;
+else if (fp->_IO_read_end != fp->_IO_write_base)
+{
+    _IO_off64_t new_pos = _IO_SYSSEEK(fp, fp->_IO_write_base - fp->_IO_read_end, 1);
+    if (new_pos == _IO_pos_BAD)
+    return 0;
+    fp->_offset = new_pos;
+}
+```
+
+如果进入 `else if` 分支会怎么样，那么将会调用 `_IO_SYSSEEK` 函数进行文件流指针调整。
+
+但我们需要注意的是，一般情况下 `_IO_write_base == _IO_read_end`，但当我们需要信息泄露时，我们会将 `_IO_write_base` 指针设置为 `leak_info` ，而 `leak_info` 会是一个比之前 `_IO_write_base` 小的值，也就是说 `leak_info < _IO_read_end`，那么 `_IO_write_base - _IO_read_end` 就会变为一个负值，结果就是 `_IO_SYSSEEK` 返回 `_IO_pos_BAD`，函数直接退出了😭。
+
+所以我们的目的就是不让程序流程进入 `else if ` 分支，办法有两种：
+
+1. 设置 `fp->flags` 标志 `_IO_IS_APPENDING(0x1000)`
+2. 在修改 `_IO_write_base` 为 `leak_info ` 后，同样修改 `_IO_read_end` 也为 `leak_info`，使得 `_IO_write_base == _IO_read_end`
+
+ok，完结撒花😘
+
+## 2.6 _IO_new_file_write()
+
+该函数作为 `_IO_jump_t` 函数虚表中 `__write` 的实现函数，可以看到就是将从 `data` 开始的 `n` 个字节的数据写入到 `f` 指向的文件中。
+
+```c++
+_IO_ssize_t _IO_new_file_write(_IO_FILE *f, const void *data, _IO_ssize_t n)
+{
+  _IO_ssize_t to_do = n;
+  while (to_do > 0)
+  {
+    _IO_ssize_t count = (__builtin_expect(f->_flags2 & _IO_FLAGS2_NOTCANCEL, 0)
+                             ? __write_nocancel(f->_fileno, data, to_do)
+                             : __write(f->_fileno, data, to_do));
+    if (count < 0)
+    {
+      f->_flags |= _IO_ERR_SEEN;
+      break;
+    }
+    to_do -= count;
+    data = (void *)((char *)data + count);
+  }
+  n -= to_do;
+  if (f->_offset >= 0)
+    f->_offset += n;
+  return n;
+}
+```
+
+## 2.7 Summary
+
+对上面要进行信息泄露的条件进行总结
+
+1. 设置 `fp->flags` 标志 `_IO_CURRENTLY_PUTTING(0x800)`
+2. 不能设置 `fp->flags` 标志 `_IO_NO_WRITE(0x8)`
+3. 使得 `_IO_write_ptr > _IO_write_base`，并使得 `_IO_write_base` 为我们想进行信息泄露的地址 `leak_info`
+4. 以下两个条件满足其一即可：
+   - 设置 `fp->flags` 标志 `_IO_IS_APPENDING(0x1000)`
+   - 使得 `_IO_write_base == _IO_read_end`，即修改 `_IO_read_end` 为 `leak_info`
