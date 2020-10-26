@@ -440,7 +440,7 @@ count = _IO_SYSWRITE(fp, data, to_do)
 
 结合对该函数的调用，可以得到 `data = f->_IO_write_base`，`to_do = f->_IO_write_ptr - f->_IO_write_base)`，也就是说从 `_IO_write_base` 开始，写 `_IO_write_ptr - _IO_write_base` 这么多的数据。那么如果我们想要进行信息泄露，就需要将 `_IO_write_base` 指向我们想要泄露信息的地址 `leak_addr`，然后使得 `_IO_write_ptr > _IO_write_base` ，那么我们就可以泄露 `leak_addr ~ _IO_write_ptr` 之间的数据了😊。
 
-**注：但事情并没有那么简单😫**
+**但事情并没有那么简单😫**
 
 我们看下面语句
 
